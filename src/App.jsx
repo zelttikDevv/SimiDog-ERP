@@ -6,7 +6,6 @@ import AdminDashboard from "./pages/AdminDashboard";
 import ReceptionistDashboard from "./pages/ReceptionistDashboard";
 import PublicPanel from "./pages/PublicPanel";
 import ChangePassword from "./pages/ChangePassword";
-import MigrateUsers from "./pages/MigrateUsers";
 
 function AppContent() {
   const { currentUser, userData, loading } = useAuth();
@@ -25,8 +24,6 @@ function AppContent() {
         {/* Panel público (sin login) */}
         <Route path="/panel/:branch" element={<PublicPanel />} />
         
-        {/* MIGRACIÓN TEMPORAL - ELIMINAR DESPUÉS */}
-        <Route path="/migrate-users" element={<MigrateUsers />} />
         
         {/* Cambio de contraseña (requiere login) */}
         <Route
