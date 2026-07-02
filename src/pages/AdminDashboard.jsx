@@ -5,6 +5,7 @@ import { signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import AdminMetrics from "../components/AdminMetrics";
 import AdminUsers from "../components/AdminUsers";
+import Inventory from "../components/Inventory";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("metrics");
@@ -36,10 +37,10 @@ export default function AdminDashboard() {
 
       {/* Tabs */}
       <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 flex gap-0">
+        <div className="max-w-7xl mx-auto px-4 flex gap-0 overflow-x-auto">
           <button
             onClick={() => setActiveTab("metrics")}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "metrics"
                 ? "border-indigo-500 text-indigo-600"
                 : "border-transparent text-gray-500 hover:text-gray-700"
@@ -49,13 +50,23 @@ export default function AdminDashboard() {
           </button>
           <button
             onClick={() => setActiveTab("users")}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "users"
                 ? "border-indigo-500 text-indigo-600"
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
             👥 Usuarios
+          </button>
+          <button
+            onClick={() => setActiveTab("inventory")}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "inventory"
+                ? "border-indigo-500 text-indigo-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            📦 Inventario
           </button>
         </div>
       </div>
@@ -64,6 +75,7 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         {activeTab === "metrics" && <AdminMetrics />}
         {activeTab === "users" && <AdminUsers />}
+        {activeTab === "inventory" && <Inventory />}
       </main>
     </div>
   );
