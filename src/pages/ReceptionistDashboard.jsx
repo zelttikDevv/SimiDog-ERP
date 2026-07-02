@@ -7,9 +7,10 @@ import NewService from "../components/NewService";
 import ActiveServices from "../components/ActiveServices";
 import Inventory from "../components/Inventory";
 import Consumptions from "../components/Consumptions";
+import POS from "../components/POS";
 
 export default function ReceptionistDashboard() {
-  const [activeTab, setActiveTab] = useState("new");
+  const [activeTab, setActiveTab] = useState("pos");
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -39,6 +40,16 @@ export default function ReceptionistDashboard() {
       {/* Tabs */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 flex gap-0 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab("pos")}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "pos"
+                ? "border-indigo-500 text-indigo-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            💰 POS
+          </button>
           <button
             onClick={() => setActiveTab("new")}
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
@@ -84,6 +95,7 @@ export default function ReceptionistDashboard() {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {activeTab === "pos" && <POS />}
         {activeTab === "new" && <NewService />}
         {activeTab === "active" && <ActiveServices />}
         {activeTab === "inventory" && <Inventory />}
