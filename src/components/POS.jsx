@@ -15,22 +15,40 @@ import {
 import { generateTicketPDF } from "../lib/pdfGenerator";
 
 const PAYMENT_METHODS = [
-  { id: "efectivo", label: "💵 Efectivo" },
+  { id: "efectivo", label: " Efectivo" },
   { id: "tarjeta", label: "💳 Tarjeta" },
   { id: "transferencia", label: "📱 Transferencia" }
+];
+
+const MVZ_SERVICES = [
+  { id: "consulta_general", name: "Consulta General", defaultPrice: 250 },
+  { id: "vacuna_puppy", name: "Vacuna Puppy", defaultPrice: 180 },
+  { id: "vacuna_triple", name: "Vacuna Triple", defaultPrice: 220 },
+  { id: "desparasitacion", name: "Desparasitación", defaultPrice: 150 },
+  { id: "curacion", name: "Curación", defaultPrice: 200 },
+  { id: "otro_servicio", name: "Otro Servicio MVZ", defaultPrice: 0 }
 ];
 
 export default function POS() {
   const { userData, currentUser } = useAuth();
   const branchId = userData?.branchId || "sucursal-11av";
 
-  const [activeServices, setActiveServices] = useState([]);
+  // Datos
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Búsqueda
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState("products"); // "products" o "mvz"
 
-  // Items del ticket
+  // Ticket
   const [items, setItems] = useState([]);
-  const [selectedServiceIds, setSelectedServiceIds] = useState([]);
+
+  // MVZ Service
+  const [selectedMVZService, setSelectedMVZService] = useState(null);
+  const [mvzServicePrice, setMvzServicePrice] = useState("");
+  const [mvzServiceNotes, setMvzServiceNotes] = useState("");
+  const [showMVZForm, setShowMVZForm] = useState(false);
 
   // Cupón
   const [couponCode, setCouponCode] = useState("");
@@ -44,23 +62,6 @@ export default function POS() {
   const [processing, setProcessing] = useState(false);
   const [message, setMessage] = useState("");
   const [lastTransaction, setLastTransaction] = useState(null);
-
-  // Cargar servicios activos
-  useEffect(() => {
-    const q = query(
-      collection(db, "services"),
-      where("branchId", "==", branchId)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((s) => s.status !== "completado");
-      setActiveServices(data);
-    });
-
-    return unsubscribe;
-  }, [branchId]);
 
   // Cargar productos
   useEffect(() => {
@@ -81,6 +82,11 @@ export default function POS() {
     return unsubscribe;
   }, [branchId]);
 
+  // Filtrar productos
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   // Cálculos
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   
@@ -96,31 +102,14 @@ export default function POS() {
   const change = Math.max(0, totalPaid - total);
   const isPaymentComplete = totalPaid >= total && total > 0;
 
-  // Agregar servicio
-  const handleAddService = (service) => {
-    if (selectedServiceIds.includes(service.id)) return;
-    
-    setItems([...items, {
-      type: "service",
-      id: service.id,
-      serviceId: service.id,
-      name: `${service.petName} - ${service.serviceType === "bano" ? "Baño" : service.serviceType === "corte" ? "Corte" : "Baño + Corte"}`,
-      quantity: 1,
-      unitPrice: 0, // precio variable
-      total: 0,
-      editable: true
-    }]);
-    setSelectedServiceIds([...selectedServiceIds, service.id]);
-  };
-
-  // Agregar producto
+  // Agregar producto al ticket
   const handleAddProduct = (product) => {
     const existing = items.find((i) => i.type === "product" && i.id === product.id);
     
     if (existing) {
       if (existing.quantity + 1 > product.stock) {
         setMessage("❌ Stock insuficiente");
-        setTimeout(() => setMessage(""), 2000);
+        setTimeout(() => setMessage(""), 3000);
         return;
       }
       setItems(items.map((i) => 
@@ -140,14 +129,31 @@ export default function POS() {
         maxStock: product.stock
       }]);
     }
+    setSearchTerm("");
   };
 
-  // Actualizar precio de servicio
-  const handleUpdateServicePrice = (index, price) => {
-    const newItems = [...items];
-    newItems[index].unitPrice = parseFloat(price) || 0;
-    newItems[index].total = newItems[index].unitPrice * newItems[index].quantity;
-    setItems(newItems);
+  // Agregar servicio MVZ
+  const handleAddMVZService = () => {
+    if (!selectedMVZService) return;
+    
+    const service = MVZ_SERVICES.find((s) => s.id === selectedMVZService);
+    const price = parseFloat(mvzServicePrice) || service.defaultPrice;
+
+    setItems([...items, {
+      type: "mvz_service",
+      id: `mvz_${Date.now()}`,
+      serviceId: selectedMVZService,
+      name: service.name,
+      notes: mvzServiceNotes,
+      quantity: 1,
+      unitPrice: price,
+      total: price
+    }]);
+
+    setSelectedMVZService(null);
+    setMvzServicePrice("");
+    setMvzServiceNotes("");
+    setShowMVZForm(false);
   };
 
   // Actualizar cantidad
@@ -160,12 +166,16 @@ export default function POS() {
     setItems(newItems);
   };
 
+  // Actualizar precio (para servicios MVZ)
+  const handleUpdatePrice = (index, price) => {
+    const newItems = [...items];
+    newItems[index].unitPrice = parseFloat(price) || 0;
+    newItems[index].total = newItems[index].unitPrice * newItems[index].quantity;
+    setItems(newItems);
+  };
+
   // Eliminar item
   const handleRemoveItem = (index) => {
-    const item = items[index];
-    if (item.type === "service") {
-      setSelectedServiceIds(selectedServiceIds.filter((id) => id !== item.serviceId));
-    }
     setItems(items.filter((_, i) => i !== index));
   };
 
@@ -240,6 +250,7 @@ export default function POS() {
   const handleProcessSale = async () => {
     if (!isPaymentComplete) {
       setMessage("❌ El pago está incompleto");
+      setTimeout(() => setMessage(""), 3000);
       return;
     }
 
@@ -252,13 +263,6 @@ export default function POS() {
     setMessage("");
 
     try {
-      // Obtener datos del cliente (del primer servicio o producto)
-      const firstService = items.find((i) => i.type === "service");
-      const serviceData = firstService 
-        ? activeServices.find((s) => s.id === firstService.serviceId)
-        : null;
-
-      // Crear transacción
       const transactionData = {
         branchId,
         userId: currentUser?.uid,
@@ -267,15 +271,14 @@ export default function POS() {
           type: i.type,
           id: i.id,
           name: i.name,
+          notes: i.notes || null,
           quantity: i.quantity,
           unitPrice: i.unitPrice,
           total: i.total
         })),
         subtotal,
         discount,
-        discountReason: appliedCoupon 
-          ? `Cupón: ${appliedCoupon.code}` 
-          : null,
+        discountReason: appliedCoupon ? `Cupón: ${appliedCoupon.code}` : null,
         total,
         payments: payments.map((p) => ({
           method: p.method,
@@ -284,12 +287,6 @@ export default function POS() {
         change,
         couponId: appliedCoupon?.id || null,
         couponCode: appliedCoupon?.code || null,
-        ownerId: serviceData?.ownerId || null,
-        ownerName: serviceData?.ownerName || null,
-        ownerPhone: serviceData?.ownerPhone || null,
-        petId: serviceData?.petId || null,
-        petName: serviceData?.petName || null,
-        serviceIds: items.filter((i) => i.type === "service").map((i) => i.serviceId),
         status: "completado",
         timestamp: serverTimestamp()
       };
@@ -317,30 +314,20 @@ export default function POS() {
         }
       }
 
-      // Marcar servicios como completados
-      for (const item of items) {
-        if (item.type === "service") {
-          await updateDoc(doc(db, "services", item.serviceId), {
-            status: "completado",
-            endTime: serverTimestamp(),
-            totalCost: item.total,
-            paymentMethod: payments[0]?.method || "efectivo"
-          });
-        }
-      }
-
       setLastTransaction(transaction);
       setMessage("✅ Venta procesada correctamente");
 
       // Generar PDF
-      generateTicketPDF(transaction);
+      setTimeout(() => {
+        generateTicketPDF(transaction);
+      }, 500);
 
       // Limpiar
       setItems([]);
-      setSelectedServiceIds([]);
       setAppliedCoupon(null);
       setCouponCode("");
       setPayments([{ method: "efectivo", amount: "" }]);
+      setSearchTerm("");
     } catch (error) {
       console.error("Error procesando venta:", error);
       setMessage("❌ Error al procesar la venta");
@@ -354,136 +341,228 @@ export default function POS() {
   }
 
   return (<div className="space-y-4">
+      {/* Mensajes */}
       {message && (
-        <div className={`p-3 rounded-md text-sm ${message.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+        <div className={`p-3 rounded-md text-sm ${message.startsWith("✅") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {message}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Columna izquierda: Agregar items */}
-        <div className="space-y-4">
-          {/* Servicios activos */}
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="font-semibold mb-2">🐾 Servicios activos</h3>
-            {activeServices.length === 0 ? (
-              <div className="text-sm text-gray-500 text-center py-3">
-                No hay servicios activos
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {activeServices.map((service) => (
-                  <button
-                    key={service.id}
-                    onClick={() => handleAddService(service)}
-                    disabled={selectedServiceIds.includes(service.id)}
-                    className="w-full text-left border rounded-md p-2 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-medium">🐕 {service.petName}</div>
-                        <div className="text-xs text-gray-500">
-                          {service.serviceType === "bano" ? "Baño" : service.serviceType === "corte" ? "Corte" : "Baño + Corte"}
-                          {" · "}
-                          {service.ownerName}
-                        </div>
-                      </div>
-                      {selectedServiceIds.includes(service.id) && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">✓ Agregado</span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Columna izquierda: Productos y Servicios */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Tabs */}
+          <div className="flex gap-2 bg-white rounded-lg shadow p-1">
+            <button
+              onClick={() => setActiveTab("products")}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "products"
+                  ? "bg-indigo-600 text-white"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              🛍️ Productos
+            </button>
+            <button
+              onClick={() => setActiveTab("mvz")}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "mvz"
+                  ? "bg-indigo-600 text-white"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              🏥 Servicios MVZ
+            </button>
           </div>
 
           {/* Productos */}
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="font-semibold mb-2">🛍️ Productos</h3>
-            {products.length === 0 ? (
-              <div className="text-sm text-gray-500 text-center py-3">
-                No hay productos disponibles
+          {activeTab === "products" && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="🔍 Buscar producto..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none"
+                />
               </div>
-            ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {products.map((product) => (
-                  <button
-                    key={product.id}
-                    onClick={() => handleAddProduct(product)}
-                    className="w-full text-left border rounded-md p-2 hover:bg-indigo-50 text-sm"
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="font-medium">{product.name}</div>
-                        <div className="text-xs text-gray-500">
-                          Stock: {product.stock} {product.unit}
+
+              {filteredProducts.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  {searchTerm ? "No se encontraron productos" : "No hay productos disponibles"}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+                  {filteredProducts.map((product) => (
+                    <button
+                      key={product.id}
+                      onClick={() => handleAddProduct(product)}
+                      className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-indigo-500 hover:bg-indigo-50 transition-all"
+                    >
+                      <div className="font-medium text-sm">{product.name}</div>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-xs text-gray-500">Stock: {product.stock} {product.unit}</span>
+                        <span className="font-bold text-indigo-600">${product.price}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Servicios MVZ */}
+          {activeTab === "mvz" && (
+            <div className="bg-white rounded-lg shadow p-4">
+              {!showMVZForm ? (
+                <>
+                  <h3 className="font-semibold mb-3">Servicios Veterinarios</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {MVZ_SERVICES.map((service) => (
+                      <button
+                        key={service.id}
+                        onClick={() => {
+                          setSelectedMVZService(service.id);
+                          setMvzServicePrice(service.defaultPrice);
+                          setShowMVZForm(true);
+                        }}
+                        className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-green-500 hover:bg-green-50 transition-all"
+                      >
+                        <div className="font-medium text-sm">{service.name}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Precio: ${service.defaultPrice}
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold">${product.price}</div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <h3 className="font-semibold">Agregar Servicio MVZ</h3>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
+                    <select
+                      value={selectedMVZService}
+                      onChange={(e) => setSelectedMVZService(e.target.value)}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    >
+                      {MVZ_SERVICES.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={mvzServicePrice}
+                      onChange={(e) => setMvzServicePrice(e.target.value)}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notas clínicas (opcional)</label>
+                    <textarea
+                      value={mvzServiceNotes}
+                      onChange={(e) => setMvzServiceNotes(e.target.value)}
+                      rows="2"
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      placeholder="Diagnóstico, tratamiento, etc."
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAddMVZService}
+                      className="flex-1 bg-green-600 text-white py-2 rounded-md text-sm hover:bg-green-700"
+                    >
+                      ✅ Agregar al ticket
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowMVZForm(false);
+                        setSelectedMVZService(null);
+                        setMvzServicePrice("");
+                        setMvzServiceNotes("");
+                      }}
+                      className="px-4 py-2 border rounded-md text-sm"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Columna derecha: Ticket */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="font-semibold mb-3">🧾 Ticket</h3>
+        <div className="bg-white rounded-lg shadow p-4 h-fit sticky top-4">
+          <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
+            🧾 Ticket
+            {items.length > 0 && (
+              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                {items.length} items
+              </span>
+            )}
+          </h3>
 
           {items.length === 0 ? (
-            <div className="text-sm text-gray-500 text-center py-8">
-              Agrega servicios o productos al ticket
+            <div className="text-center py-8 text-gray-400 text-sm">
+              Agrega productos o servicios al ticket
             </div>
           ) : (
-            <div className="space-y-2 mb-4">
+            <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
               {items.map((item, index) => (
-                <div key={index} className="border rounded-md p-2">
-                  <div className="flex justify-between items-start mb-1">
+                <div key={index} className="border rounded-lg p-3 bg-gray-50">
+                  <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
-                      <div className="text-sm font-medium">{item.name}</div>
+                      <div className="text-sm font-semibold">{item.name}</div>
                       <div className="text-xs text-gray-500">
-                        {item.type === "service" ? "Servicio" : "Producto"}
+                        {item.type === "product" ? "️ Producto" : "🏥 Servicio MVZ"}
+                        {item.notes && <div className="italic mt-1">{item.notes}</div>}
                       </div>
                     </div>
                     <button
                       onClick={() => handleRemoveItem(index)}
-                      className="text-red-500 text-xs hover:text-red-700"
+                      className="text-red-500 hover:text-red-700 text-lg leading-none"
                     >
-                      ✕
+                      ×
                     </button>
                   </div>
 
                   <div className="flex gap-2 items-center">
-                    {item.editable ? (
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Precio"
-                        value={item.unitPrice || ""}
-                        onChange={(e) => handleUpdateServicePrice(index, e.target.value)}
-                        className="flex-1 border rounded px-2 py-1 text-sm"
-                      />
+                    {item.type === "product" ? (
+                      <>
+                        <span className="text-xs text-gray-600">Cant:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max={item.maxStock}
+                          value={item.quantity}
+                          onChange={(e) => handleUpdateQuantity(index, e.target.value)}
+                          className="w-16 border rounded px-2 py-1 text-sm text-center"
+                        />
+                      </>
                     ) : (
-                      <div className="text-xs text-gray-500">${item.unitPrice} c/u</div>
+                      <>
+                        <span className="text-xs text-gray-600">Precio:</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.unitPrice}
+                          onChange={(e) => handleUpdatePrice(index, e.target.value)}
+                          className="flex-1 border rounded px-2 py-1 text-sm"
+                        />
+                      </>
                     )}
                     
-                    {!item.editable && (
-                      <input
-                        type="number"
-                        min="1"
-                        max={item.maxStock}
-                        value={item.quantity}
-                        onChange={(e) => handleUpdateQuantity(index, e.target.value)}
-                        className="w-16 border rounded px-2 py-1 text-sm text-center"
-                      />
-                    )}
-
-                    <div className="text-sm font-semibold w-20 text-right">
+                    <div className="text-sm font-bold text-indigo-600 ml-auto">
                       ${item.total.toFixed(2)}
                     </div>
                   </div>
@@ -495,7 +574,7 @@ export default function POS() {
           {/* Cupón */}
           <div className="border-t pt-3 mb-3">
             {appliedCoupon ? (
-              <div className="bg-green-50 border border-green-200 rounded p-2 flex justify-between items-center">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-2 flex justify-between items-center">
                 <div>
                   <div className="text-sm font-medium text-green-800">
                     🎟️ {appliedCoupon.code}
@@ -537,31 +616,31 @@ export default function POS() {
 
           {/* Totales */}
           <div className="border-t pt-3 space-y-1 text-sm">
-            <div className="flex justify-between">
+            <div className="flex justify-between text-gray-600">
               <span>Subtotal:</span>
               <span>${subtotal.toFixed(2)}</span>
             </div>
             {discount > 0 && (
-              <div className="flex justify-between text-red-600">
+              <div className="flex justify-between text-green-600">
                 <span>Descuento:</span>
                 <span>-${discount.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between font-bold text-lg pt-2 border-t">
+            <div className="flex justify-between font-bold text-xl pt-2 border-t mt-2">
               <span>TOTAL:</span>
-              <span>${total.toFixed(2)}</span>
+              <span className="text-indigo-600">${total.toFixed(2)}</span>
             </div>
           </div>
 
           {/* Pagos */}
           <div className="border-t pt-3 mt-3 space-y-2">
             <div className="flex justify-between items-center">
-              <h4 className="font-semibold text-sm">💰 Pagos</h4>
+              <h4 className="font-semibold text-sm">💰 Forma de pago</h4>
               <button
                 onClick={handleAddPayment}
                 className="text-xs bg-gray-200 px-2 py-1 rounded hover:bg-gray-300"
               >
-                + Agregar
+                + Dividir
               </button>
             </div>
 
@@ -570,7 +649,7 @@ export default function POS() {
                 <select
                   value={payment.method}
                   onChange={(e) => handleUpdatePayment(index, "method", e.target.value)}
-                  className="border rounded px-2 py-1 text-sm"
+                  className="border rounded px-2 py-1.5 text-sm bg-white"
                 >
                   {PAYMENT_METHODS.map((m) => (
                     <option key={m.id} value={m.id}>{m.label}</option>
@@ -579,33 +658,33 @@ export default function POS() {
                 <input
                   type="number"
                   step="0.01"
-                  placeholder="Monto"
+                  placeholder={`$${total.toFixed(2)}`}
                   value={payment.amount}
                   onChange={(e) => handleUpdatePayment(index, "amount", e.target.value)}
-                  className="flex-1 border rounded px-2 py-1 text-sm"
+                  className="flex-1 border rounded px-2 py-1.5 text-sm"
                 />
                 {payments.length > 1 && (
                   <button
                     onClick={() => handleRemovePayment(index)}
-                    className="text-red-500 text-sm"
+                    className="text-red-500 text-sm px-2"
                   >
-                    ✕
+                    ×
                   </button>
                 )}
               </div>
             ))}
 
-            <div className="flex justify-between text-sm pt-2 border-t">
+            <div className="flex justify-between text-sm pt-2 border-t mt-2">
               <span>Total pagado:</span>
-              <span className={isPaymentComplete ? "text-green-600 font-semibold" : "text-red-600"}>
+              <span className={`font-semibold ${isPaymentComplete ? "text-green-600" : "text-gray-600"}`}>
                 ${totalPaid.toFixed(2)}
               </span>
             </div>
 
             {change > 0 && (
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-sm bg-green-50 p-2 rounded">
                 <span>Cambio:</span>
-                <span className="font-semibold">${change.toFixed(2)}</span>
+                <span className="font-bold text-green-700">${change.toFixed(2)}</span>
               </div>
             )}
           </div>
@@ -614,12 +693,12 @@ export default function POS() {
           <button
             onClick={handleProcessSale}
             disabled={!isPaymentComplete || items.length === 0 || processing}
-            className="w-full bg-green-600 text-white py-3 rounded-md font-medium mt-4 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-green-600 text-white py-3 rounded-lg font-bold mt-4 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
-            {processing ? "Procesando..." : `✅ Cobrar $${total.toFixed(2)}`}
+            {processing ? "⏳ Procesando..." : `✅ Cobrar $${total.toFixed(2)}`}
           </button>
         </div>
       </div>
     </div>
   );
-                      }
+                        }
