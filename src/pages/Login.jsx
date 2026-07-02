@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { auth } from "../lib/firebase";
+import { auth, db } from "../lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
 export default function Login() {
@@ -18,21 +19,33 @@ export default function Login() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
-      // Obtener el rol del usuario desde Firestore
-      const { doc, getDoc } = await import("firebase/firestore");
-      const { db } = await import("../lib/firebase");
+      // Obtener datos del usuario
       const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
       
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        // Redirigir según el rol
-        if (userData.role === "admin") {
-          navigate("/admin");
-        } else {
-          navigate("/recepcion");
-        }
-      } else {
+      if (!userDoc.exists()) {
         setError("Usuario no encontrado en el sistema");
+        return;
+      }
+
+      const userData = userDoc.data();
+
+      // Verificar si está desactivado
+      if (userData.active === false) {
+        setError("Tu cuenta está desactivada. Contacta al administrador.");
+        return;
+      }
+
+      // Si no ha cambiado la contraseña, redirigir a cambio obligatorio
+      if (userData.passwordChanged !== true) {
+        navigate("/change-password");
+        return;
+      }
+
+      // Redirigir según el rol
+      if (userData.role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/recepcion");
       }
     } catch (err) {
       console.error("Error de login:", err);
@@ -47,7 +60,7 @@ export default function Login() {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            SimiDog ERP
+            🐾 SimiDog ERP
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Inicia sesión para continuar
@@ -59,28 +72,26 @@ export default function Login() {
               <div className="text-sm text-red-700">{error}</div>
             </div>
           )}
-          <div className="rounded-md shadow-sm -space-y-px">
+          <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="sr-only">Email</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
                 id="email"
-                name="email"
                 type="email"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div>
-              <label htmlFor="password" className="sr-only">Contraseña</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
               <input
                 id="password"
-                name="password"
                 type="password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="Contraseña"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -88,15 +99,13 @@ export default function Login() {
             </div>
           </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {loading ? "Iniciando sesión..." : "Iniciar sesión"}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {loading ? "Iniciando sesión..." : "Iniciar sesión"}
+          </button>
         </form>
       </div>
     </div>
