@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard";
 import ReceptionistDashboard from "./pages/ReceptionistDashboard";
+import PublicPanel from "./pages/PublicPanel";
 
 function AppContent() {
   const { currentUser, userData, loading } = useAuth();
@@ -19,6 +20,10 @@ function AppContent() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Panel público (sin login) */}
+        <Route path="/panel/:branch" element={<PublicPanel />} />
+        
+        {/* Login */}
         <Route
           path="/login"
           element={
@@ -29,6 +34,8 @@ function AppContent() {
             )
           }
         />
+        
+        {/* Panel Admin */}
         <Route
           path="/admin"
           element={
@@ -37,6 +44,8 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
+        
+        {/* Panel Recepcionista */}
         <Route
           path="/recepcion"
           element={
@@ -45,6 +54,8 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
+        
+        {/* Ruta raíz */}
         <Route
           path="/"
           element={
