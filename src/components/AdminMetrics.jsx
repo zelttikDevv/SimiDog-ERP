@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { db } from "../lib/firebase";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  orderBy
+} from "firebase/firestore";
 
 const BRANCHES = {
   "sucursal-11av": "SimiDog 11av",
@@ -24,17 +30,17 @@ export default function AdminMetrics() {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [branchFilter, setBranchFilter] = useState("all");
-  const [services, setServices] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Cargar todos los servicios completados
+  // Cargar todas las transacciones completadas
   useEffect(() => {
-    const q = query(collection(db, "services"));
+    const q = query(collection(db, "transactions"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((s) => s.status === "completado");
-      setServices(data);
+        .filter((t) => t.status === "completado");
+      setTransactions(data);
       setLoading(false);
     });
     return unsubscribe;
@@ -67,57 +73,74 @@ export default function AdminMetrics() {
     return { start, end };
   };
 
-  // Filtrar servicios
-  const filteredServices = services.filter((s) => {
+  // Filtrar transacciones
+  const filteredTransactions = transactions.filter((t) => {
     // Filtro por sucursal
-    if (branchFilter !== "all" && s.branchId !== branchFilter) return false;
+    if (branchFilter !== "all" && t.branchId !== branchFilter) return false;
 
     // Filtro por fecha
     const { start, end } = getDateRange();
     if (!start || !end) return true; // histórico
 
-    if (!s.endTime) return false;
-    const serviceDate = s.endTime.toDate ? s.endTime.toDate() : new Date(s.endTime);
-    return serviceDate >= start && serviceDate <= end;
+    if (!t.timestamp) return false;
+    const txDate = t.timestamp.toDate ? t.timestamp.toDate() : new Date(t.timestamp);
+    return txDate >= start && txDate <= end;
   });
 
   // Calcular métricas
-  const totalServices = filteredServices.length;
-  const totalRevenue = filteredServices.reduce((sum, s) => sum + (s.totalCost || 0), 0);
-  const homeServices = filteredServices.filter((s) => s.modality === "domicilio").length;
-  const inStoreServices = filteredServices.filter((s) => s.modality === "sucursal").length;
+  const totalTransactions = filteredTransactions.length;
+  const totalRevenue = filteredTransactions.reduce((sum, t) => sum + (t.total || 0), 0);
+  
+  // Calcular ingresos por tipo de item
+  let servicesRevenue = 0;
+  let productsRevenue = 0;
+  
+  filteredTransactions.forEach((t) => {
+    t.items?.forEach((item) => {
+      if (item.type === "product") {
+        productsRevenue += item.total || 0;
+      } else {
+        // bath, mvz, o service
+        servicesRevenue += item.total || 0;
+      }
+    });
+  });
 
   // Por método de pago
   const byPayment = {};
-  filteredServices.forEach((s) => {
-    const method = s.paymentMethod || "sin_registro";
-    if (!byPayment[method]) {
-      byPayment[method] = { count: 0, total: 0 };
-    }
-    byPayment[method].count++;
-    byPayment[method].total += s.totalCost || 0;
+  filteredTransactions.forEach((t) => {
+    t.payments?.forEach((p) => {
+      const method = p.method || "sin_registro";
+      if (!byPayment[method]) {
+        byPayment[method] = { count: 0, total: 0 };
+      }
+      byPayment[method].count++;
+      byPayment[method].total += p.amount || 0;
+    });
   });
 
-  // Por tipo de servicio
-  const byServiceType = {};
-  filteredServices.forEach((s) => {
-    const type = s.serviceType || "sin_registro";
-    if (!byServiceType[type]) {
-      byServiceType[type] = { count: 0, total: 0 };
-    }
-    byServiceType[type].count++;
-    byServiceType[type].total += s.totalCost || 0;
+  // Por tipo de servicio/producto
+  const byItemType = {};
+  filteredTransactions.forEach((t) => {
+    t.items?.forEach((item) => {
+      const type = item.type || "unknown";
+      if (!byItemType[type]) {
+        byItemType[type] = { count: 0, total: 0, name: item.name };
+      }
+      byItemType[type].count++;
+      byItemType[type].total += item.total || 0;
+    });
   });
 
   // Por sucursal
   const byBranch = {};
-  filteredServices.forEach((s) => {
-    const branch = s.branchId || "sin_sucursal";
+  filteredTransactions.forEach((t) => {
+    const branch = t.branchId || "sin_sucursal";
     if (!byBranch[branch]) {
       byBranch[branch] = { count: 0, total: 0 };
     }
     byBranch[branch].count++;
-    byBranch[branch].total += s.totalCost || 0;
+    byBranch[branch].total += t.total || 0;
   });
 
   if (loading) {
@@ -198,20 +221,20 @@ export default function AdminMetrics() {
       {/* KPIs principales */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-xs text-gray-500 uppercase">Servicios</div>
-          <div className="text-3xl font-bold text-indigo-600 mt-1">{totalServices}</div>
+          <div className="text-xs text-gray-500 uppercase">Ventas</div>
+          <div className="text-3xl font-bold text-indigo-600 mt-1">{totalTransactions}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-xs text-gray-500 uppercase">Ingresos</div>
+          <div className="text-xs text-gray-500 uppercase">Ingresos Totales</div>
           <div className="text-3xl font-bold text-green-600 mt-1">${totalRevenue.toFixed(2)}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-xs text-gray-500 uppercase">En Sucursal</div>
-          <div className="text-3xl font-bold text-blue-600 mt-1">{inStoreServices}</div>
+          <div className="text-xs text-gray-500 uppercase">Servicios</div>
+          <div className="text-3xl font-bold text-blue-600 mt-1">${servicesRevenue.toFixed(2)}</div>
         </div>
         <div className="bg-white rounded-lg shadow p-4">
-          <div className="text-xs text-gray-500 uppercase">A Domicilio</div>
-          <div className="text-3xl font-bold text-purple-600 mt-1">{homeServices}</div>
+          <div className="text-xs text-gray-500 uppercase">Productos</div>
+          <div className="text-3xl font-bold text-purple-600 mt-1">${productsRevenue.toFixed(2)}</div>
         </div>
       </div>
 
@@ -223,31 +246,12 @@ export default function AdminMetrics() {
             <div key={branchId} className="flex justify-between items-center border-b pb-2">
               <span className="text-sm">{BRANCHES[branchId] || branchId}</span>
               <div className="text-right">
-                <div className="text-sm font-semibold">{data.count} servicios</div>
+                <div className="text-sm font-semibold">{data.count} ventas</div>
                 <div className="text-xs text-gray-500">${data.total.toFixed(2)}</div>
               </div>
             </div>
           ))}
           {Object.keys(byBranch).length === 0 && (
-            <div className="text-sm text-gray-500 text-center py-2">Sin datos</div>
-          )}
-        </div>
-      </div>
-
-      {/* Por tipo de servicio */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">✂️ Por Tipo de Servicio</h3>
-        <div className="space-y-2">
-          {Object.entries(byServiceType).map(([type, data]) => (
-            <div key={type} className="flex justify-between items-center border-b pb-2">
-              <span className="text-sm">{SERVICE_LABELS[type] || type}</span>
-              <div className="text-right">
-                <div className="text-sm font-semibold">{data.count}</div>
-                <div className="text-xs text-gray-500">${data.total.toFixed(2)}</div>
-              </div>
-            </div>
-          ))}
-          {Object.keys(byServiceType).length === 0 && (
             <div className="text-sm text-gray-500 text-center py-2">Sin datos</div>
           )}
         </div>
@@ -261,7 +265,7 @@ export default function AdminMetrics() {
             <div key={method} className="flex justify-between items-center border-b pb-2">
               <span className="text-sm">{PAYMENT_LABELS[method] || method}</span>
               <div className="text-right">
-                <div className="text-sm font-semibold">{data.count}</div>
+                <div className="text-sm font-semibold">{data.count} transacciones</div>
                 <div className="text-xs text-gray-500">${data.total.toFixed(2)}</div>
               </div>
             </div>
@@ -271,6 +275,28 @@ export default function AdminMetrics() {
           )}
         </div>
       </div>
+
+      {/* Detalle por tipo de item */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">📦 Detalle por Tipo</h3>
+        <div className="space-y-2">
+          {Object.entries(byItemType).map(([type, data]) => {
+            const typeName = type === "product" ? "🛍️ Producto" : type === "bath" ? "🛁 Baño/Corte" : type === "mvz" ? "🏥 Servicio MVZ" : type;
+            return (
+              <div key={type} className="flex justify-between items-center border-b pb-2">
+                <span className="text-sm">{typeName}</span>
+                <div className="text-right">
+                  <div className="text-sm font-semibold">{data.count} vendidos</div>
+                  <div className="text-xs text-gray-500">${data.total.toFixed(2)}</div>
+                </div>
+              </div>
+            );
+          })}
+          {Object.keys(byItemType).length === 0 && (
+            <div className="text-sm text-gray-500 text-center py-2">Sin datos</div>
+          )}
+        </div>
+      </div>
     </div>
   );
-}
+        }
