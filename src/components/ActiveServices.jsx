@@ -59,7 +59,7 @@ export default function ActiveServices() {
     return () => clearInterval(interval);
   }, []);
 
-  // Escuchar servicios activos (solo de la sucursal del usuario)
+  // Escuchar servicios activos
   useEffect(() => {
     const q = query(
       collection(db, "services"),
@@ -70,11 +70,10 @@ export default function ActiveServices() {
       const data = snapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter((s) => s.status !== "completado")
-        // Ordenar por arrivalTime en el cliente
         .sort((a, b) => {
           const aTime = a.arrivalTime?.toMillis?.() || 0;
           const bTime = b.arrivalTime?.toMillis?.() || 0;
-          return bTime - aTime; // Más reciente primero
+          return bTime - aTime;
         });
       setServices(data);
       setLoading(false);
@@ -134,6 +133,9 @@ export default function ActiveServices() {
               <div>
                 <h3 className="font-bold text-lg">🐾 {service.petName}</h3>
                 <p className="text-sm text-gray-500">👤 {service.ownerName} · 📞 {service.ownerPhone}</p>
+                {service.petWeight && (
+                  <p className="text-xs text-gray-400">⚖️ {service.petWeight} kg</p>
+                )}
               </div>
               <div className="text-right">
                 <div className="font-mono text-xl font-bold text-indigo-600">
@@ -216,4 +218,4 @@ export default function ActiveServices() {
       })}
     </div>
   );
-                    }
+                        }
