@@ -24,12 +24,6 @@ const SERVICE_LABELS = {
   bano_y_corte: "Baño + Corte"
 };
 
-const PAYMENT_METHODS = [
-  { id: "efectivo", label: "Efectivo" },
-  { id: "tarjeta", label: "Tarjeta" },
-  { id: "transferencia", label: "Transferencia" }
-];
-
 function getTimeElapsed(arrivalTime) {
   if (!arrivalTime) return "--:--";
   const arrival = arrivalTime.toDate ? arrivalTime.toDate() : new Date(arrivalTime);
@@ -47,10 +41,6 @@ export default function ActiveServices() {
   
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [checkoutId, setCheckoutId] = useState(null);
-  const [cost, setCost] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("efectivo");
-  const [saving, setSaving] = useState(false);
   const [, setTick] = useState(0);
 
   // Cronómetro en vivo
@@ -94,30 +84,20 @@ export default function ActiveServices() {
     await updateDoc(doc(db, "services", serviceId), updateData);
   };
 
-  // Dar salida
-  const handleCheckout = async (serviceId) => {
-    if (!cost || parseFloat(cost) <= 0) {
-      alert("Ingresa un costo válido");
-      return;
-    }
-    setSaving(true);
-    await updateDoc(doc(db, "services", serviceId), {
-      status: "completado",
-      endTime: serverTimestamp(),
-      totalCost: parseFloat(cost),
-      paymentMethod
-    });
-    setCheckoutId(null);
-    setCost("");
-    setSaving(false);
-  };
-
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Cargando servicios...</div>;
   }
 
   return (
     <div className="space-y-4">
+      {/* Info importante */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-blue-700">
+          💡 <strong>Nota:</strong> El cobro de servicios se realiza desde el <strong>POS (Punto de Venta)</strong>. 
+          Esta sección es solo para gestionar el estado de los servicios.
+        </p>
+      </div>
+
       {services.length === 0 && (
         <div className="text-center py-8 text-gray-500 bg-white rounded-lg shadow">
           No hay servicios activos en esta sucursal
@@ -154,68 +134,23 @@ export default function ActiveServices() {
               </span>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {STATUS_OPTIONS.filter((s) => s.id !== service.status).map((option) => (
-                <button
-                  key={option.id}
-                  onClick={() => handleChangeStatus(service.id, option.id)}
-                  className="text-xs px-3 py-1.5 border rounded-md hover:bg-gray-50"
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            {checkoutId !== service.id ? (
-              <button
-                onClick={() => setCheckoutId(service.id)}
-                className="w-full bg-red-500 text-white py-2 rounded-md text-sm font-medium hover:bg-red-600"
-              >
-                Dar Salida y Cobrar
-              </button>
-            ) : (
-              <div className="border rounded-md p-3 space-y-2 bg-gray-50">
-                <h4 className="text-sm font-semibold">Registrar Cobro</h4>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    placeholder="Costo ($)"
-                    value={cost}
-                    onChange={(e) => setCost(e.target.value)}
-                    className="flex-1 border rounded-md px-3 py-2 text-sm"
-                    min="0"
-                    step="0.01"
-                  />
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="border rounded-md px-3 py-2 text-sm"
-                  >
-                    {PAYMENT_METHODS.map((p) => (
-                      <option key={p.id} value={p.id}>{p.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex gap-2">
+            <div className="border-t pt-3">
+              <p className="text-xs font-semibold text-gray-600 mb-2">Cambiar estado:</p>
+              <div className="flex flex-wrap gap-2">
+                {STATUS_OPTIONS.filter((s) => s.id !== service.status).map((option) => (
                   <button
-                    onClick={() => handleCheckout(service.id)}
-                    disabled={saving}
-                    className="flex-1 bg-green-600 text-white py-2 rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+                    key={option.id}
+                    onClick={() => handleChangeStatus(service.id, option.id)}
+                    className="text-xs px-3 py-2 border-2 border-gray-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-all"
                   >
-                    {saving ? "Guardando..." : "✅ Confirmar Salida"}
+                    {option.label}
                   </button>
-                  <button
-                    onClick={() => setCheckoutId(null)}
-                    className="px-4 py-2 border rounded-md text-sm"
-                  >
-                    Cancelar
-                  </button>
-                </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
         );
       })}
     </div>
   );
-                        }
+                    }
