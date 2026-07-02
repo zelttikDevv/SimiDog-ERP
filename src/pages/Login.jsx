@@ -16,9 +16,26 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate("/");
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Obtener el rol del usuario desde Firestore
+      const { doc, getDoc } = await import("firebase/firestore");
+      const { db } = await import("../lib/firebase");
+      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        // Redirigir según el rol
+        if (userData.role === "admin") {
+          navigate("/admin");
+        } else {
+          navigate("/recepcion");
+        }
+      } else {
+        setError("Usuario no encontrado en el sistema");
+      }
     } catch (err) {
+      console.error("Error de login:", err);
       setError("Credenciales inválidas. Verifica tu email y contraseña.");
     } finally {
       setLoading(false);
