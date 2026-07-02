@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard";
 import ReceptionistDashboard from "./pages/ReceptionistDashboard";
 import PublicPanel from "./pages/PublicPanel";
+import ChangePassword from "./pages/ChangePassword";
 
 function AppContent() {
   const { currentUser, userData, loading } = useAuth();
@@ -22,6 +23,14 @@ function AppContent() {
       <Routes>
         {/* Panel público (sin login) */}
         <Route path="/panel/:branch" element={<PublicPanel />} />
+        
+        {/* Cambio de contraseña (requiere login) */}
+        <Route
+          path="/change-password"
+          element={
+            currentUser ? <ChangePassword /> : <Navigate to="/login" replace />
+          }
+        />
         
         {/* Login */}
         <Route
