@@ -15,9 +15,24 @@ import {
 import { generateTicketPDF } from "../lib/pdfGenerator";
 
 const PAYMENT_METHODS = [
-  { id: "efectivo", label: " Efectivo" },
+  { id: "efectivo", label: "💵 Efectivo" },
   { id: "tarjeta", label: "💳 Tarjeta" },
   { id: "transferencia", label: "📱 Transferencia" }
+];
+
+const BATH_SERVICES = [
+  { id: "bano_perro_pequeno", name: "Baño Perro Pequeño (<10kg)", defaultPrice: 150 },
+  { id: "bano_perro_mediano", name: "Baño Perro Mediano (10-25kg)", defaultPrice: 200 },
+  { id: "bano_perro_grande", name: "Baño Perro Grande (25-40kg)", defaultPrice: 250 },
+  { id: "bano_perro_gigante", name: "Baño Perro Gigante (>40kg)", defaultPrice: 300 },
+  { id: "corte_perro_pequeno", name: "Corte Perro Pequeño", defaultPrice: 250 },
+  { id: "corte_perro_mediano", name: "Corte Perro Mediano", defaultPrice: 300 },
+  { id: "corte_perro_grande", name: "Corte Perro Grande", defaultPrice: 350 },
+  { id: "bano_y_corte_pequeno", name: "Baño + Corte Pequeño", defaultPrice: 350 },
+  { id: "bano_y_corte_mediano", name: "Baño + Corte Mediano", defaultPrice: 450 },
+  { id: "bano_y_corte_grande", name: "Baño + Corte Grande", defaultPrice: 550 },
+  { id: "bano_gato", name: "Baño Gato", defaultPrice: 180 },
+  { id: "otro_bano_corte", name: "Otro Servicio", defaultPrice: 0 }
 ];
 
 const MVZ_SERVICES = [
@@ -39,16 +54,17 @@ export default function POS() {
   
   // Búsqueda
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("products"); // "products" o "mvz"
+  const [activeTab, setActiveTab] = useState("products"); // "products", "bath" o "mvz"
 
   // Ticket
   const [items, setItems] = useState([]);
 
-  // MVZ Service
-  const [selectedMVZService, setSelectedMVZService] = useState(null);
-  const [mvzServicePrice, setMvzServicePrice] = useState("");
-  const [mvzServiceNotes, setMvzServiceNotes] = useState("");
-  const [showMVZForm, setShowMVZForm] = useState(false);
+  // Servicio seleccionado (baño o MVZ)
+  const [selectedService, setSelectedService] = useState(null);
+  const [servicePrice, setServicePrice] = useState("");
+  const [serviceNotes, setServiceNotes] = useState("");
+  const [showServiceForm, setShowServiceForm] = useState(false);
+  const [serviceType, setServiceType] = useState("bath"); // "bath" o "mvz"
 
   // Cupón
   const [couponCode, setCouponCode] = useState("");
@@ -61,7 +77,6 @@ export default function POS() {
   // Estado
   const [processing, setProcessing] = useState(false);
   const [message, setMessage] = useState("");
-  const [lastTransaction, setLastTransaction] = useState(null);
 
   // Cargar productos
   useEffect(() => {
@@ -132,28 +147,36 @@ export default function POS() {
     setSearchTerm("");
   };
 
-  // Agregar servicio MVZ
-  const handleAddMVZService = () => {
-    if (!selectedMVZService) return;
+  // Abrir formulario de servicio
+  const handleOpenServiceForm = (service, type) => {
+    setSelectedService(service);
+    setServicePrice(service.defaultPrice);
+    setServiceNotes("");
+    setServiceType(type);
+    setShowServiceForm(true);
+  };
+
+  // Agregar servicio (baño o MVZ) al ticket
+  const handleAddService = () => {
+    if (!selectedService) return;
     
-    const service = MVZ_SERVICES.find((s) => s.id === selectedMVZService);
-    const price = parseFloat(mvzServicePrice) || service.defaultPrice;
+    const price = parseFloat(servicePrice) || selectedService.defaultPrice;
 
     setItems([...items, {
-      type: "mvz_service",
-      id: `mvz_${Date.now()}`,
-      serviceId: selectedMVZService,
-      name: service.name,
-      notes: mvzServiceNotes,
+      type: serviceType, // "bath" o "mvz"
+      id: `${serviceType}_${Date.now()}`,
+      serviceId: selectedService.id,
+      name: selectedService.name,
+      notes: serviceNotes,
       quantity: 1,
       unitPrice: price,
       total: price
     }]);
 
-    setSelectedMVZService(null);
-    setMvzServicePrice("");
-    setMvzServiceNotes("");
-    setShowMVZForm(false);
+    setSelectedService(null);
+    setServicePrice("");
+    setServiceNotes("");
+    setShowServiceForm(false);
   };
 
   // Actualizar cantidad
@@ -166,7 +189,7 @@ export default function POS() {
     setItems(newItems);
   };
 
-  // Actualizar precio (para servicios MVZ)
+  // Actualizar precio
   const handleUpdatePrice = (index, price) => {
     const newItems = [...items];
     newItems[index].unitPrice = parseFloat(price) || 0;
@@ -314,7 +337,6 @@ export default function POS() {
         }
       }
 
-      setLastTransaction(transaction);
       setMessage("✅ Venta procesada correctamente");
 
       // Generar PDF
@@ -361,17 +383,27 @@ export default function POS() {
                   : "text-gray-600 hover:bg-gray-100"
               }`}
             >
-              🛍️ Productos
+              ️ Productos
+            </button>
+            <button
+              onClick={() => setActiveTab("bath")}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "bath"
+                  ? "bg-purple-600 text-white"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              🛁 Baño/Corte
             </button>
             <button
               onClick={() => setActiveTab("mvz")}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
                 activeTab === "mvz"
-                  ? "bg-indigo-600 text-white"
+                  ? "bg-green-600 text-white"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
             >
-              🏥 Servicios MVZ
+              🏥 MVZ
             </button>
           </div>
 
@@ -412,21 +444,105 @@ export default function POS() {
             </div>
           )}
 
+          {/* Servicios de Baño/Corte */}
+          {activeTab === "bath" && (
+            <div className="bg-white rounded-lg shadow p-4">
+              {!showServiceForm ? (
+                <>
+                  <h3 className="font-semibold mb-3">Servicios de Baño y Corte</h3>
+                  <div className="grid grid-cols-1 gap-3">
+                    {BATH_SERVICES.map((service) => (
+                      <button
+                        key={service.id}
+                        onClick={() => handleOpenServiceForm(service, "bath")}
+                        className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-purple-500 hover:bg-purple-50 transition-all"
+                      >
+                        <div className="font-medium text-sm">{service.name}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Precio: ${service.defaultPrice}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <h3 className="font-semibold">Agregar Servicio de Baño/Corte</h3>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
+                    <select
+                      value={selectedService?.id}
+                      onChange={(e) => {
+                        const service = BATH_SERVICES.find((s) => s.id === e.target.value);
+                        setSelectedService(service);
+                        setServicePrice(service?.defaultPrice || "");
+                      }}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    >
+                      {BATH_SERVICES.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={servicePrice}
+                      onChange={(e) => setServicePrice(e.target.value)}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Notas (opcional)</label>
+                    <textarea
+                      value={serviceNotes}
+                      onChange={(e) => setServiceNotes(e.target.value)}
+                      rows="2"
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      placeholder="Observaciones del servicio..."
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAddService}
+                      className="flex-1 bg-purple-600 text-white py-2 rounded-md text-sm hover:bg-purple-700"
+                    >
+                      ✅ Agregar al ticket
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowServiceForm(false);
+                        setSelectedService(null);
+                        setServicePrice("");
+                        setServiceNotes("");
+                      }}
+                      className="px-4 py-2 border rounded-md text-sm"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Servicios MVZ */}
           {activeTab === "mvz" && (
             <div className="bg-white rounded-lg shadow p-4">
-              {!showMVZForm ? (
+              {!showServiceForm ? (
                 <>
                   <h3 className="font-semibold mb-3">Servicios Veterinarios</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {MVZ_SERVICES.map((service) => (
                       <button
                         key={service.id}
-                        onClick={() => {
-                          setSelectedMVZService(service.id);
-                          setMvzServicePrice(service.defaultPrice);
-                          setShowMVZForm(true);
-                        }}
+                        onClick={() => handleOpenServiceForm(service, "mvz")}
                         className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-green-500 hover:bg-green-50 transition-all"
                       >
                         <div className="font-medium text-sm">{service.name}</div>
@@ -444,8 +560,12 @@ export default function POS() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
                     <select
-                      value={selectedMVZService}
-                      onChange={(e) => setSelectedMVZService(e.target.value)}
+                      value={selectedService?.id}
+                      onChange={(e) => {
+                        const service = MVZ_SERVICES.find((s) => s.id === e.target.value);
+                        setSelectedService(service);
+                        setServicePrice(service?.defaultPrice || "");
+                      }}
                       className="w-full border rounded-md px-3 py-2 text-sm"
                     >
                       {MVZ_SERVICES.map((s) => (
@@ -459,8 +579,8 @@ export default function POS() {
                     <input
                       type="number"
                       step="0.01"
-                      value={mvzServicePrice}
-                      onChange={(e) => setMvzServicePrice(e.target.value)}
+                      value={servicePrice}
+                      onChange={(e) => setServicePrice(e.target.value)}
                       className="w-full border rounded-md px-3 py-2 text-sm"
                     />
                   </div>
@@ -468,8 +588,8 @@ export default function POS() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notas clínicas (opcional)</label>
                     <textarea
-                      value={mvzServiceNotes}
-                      onChange={(e) => setMvzServiceNotes(e.target.value)}
+                      value={serviceNotes}
+                      onChange={(e) => setServiceNotes(e.target.value)}
                       rows="2"
                       className="w-full border rounded-md px-3 py-2 text-sm"
                       placeholder="Diagnóstico, tratamiento, etc."
@@ -478,17 +598,17 @@ export default function POS() {
 
                   <div className="flex gap-2">
                     <button
-                      onClick={handleAddMVZService}
+                      onClick={handleAddService}
                       className="flex-1 bg-green-600 text-white py-2 rounded-md text-sm hover:bg-green-700"
                     >
                       ✅ Agregar al ticket
                     </button>
                     <button
                       onClick={() => {
-                        setShowMVZForm(false);
-                        setSelectedMVZService(null);
-                        setMvzServicePrice("");
-                        setMvzServiceNotes("");
+                        setShowServiceForm(false);
+                        setSelectedService(null);
+                        setServicePrice("");
+                        setServiceNotes("");
                       }}
                       className="px-4 py-2 border rounded-md text-sm"
                     >
@@ -504,7 +624,7 @@ export default function POS() {
         {/* Columna derecha: Ticket */}
         <div className="bg-white rounded-lg shadow p-4 h-fit sticky top-4">
           <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
-            🧾 Ticket
+             Ticket
             {items.length > 0 && (
               <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
                 {items.length} items
@@ -524,7 +644,7 @@ export default function POS() {
                     <div className="flex-1">
                       <div className="text-sm font-semibold">{item.name}</div>
                       <div className="text-xs text-gray-500">
-                        {item.type === "product" ? "️ Producto" : "🏥 Servicio MVZ"}
+                        {item.type === "product" ? "️ Producto" : item.type === "bath" ? "🛁 Baño/Corte" : "🏥 Servicio MVZ"}
                         {item.notes && <div className="italic mt-1">{item.notes}</div>}
                       </div>
                     </div>
@@ -577,7 +697,7 @@ export default function POS() {
               <div className="bg-green-50 border border-green-200 rounded-lg p-2 flex justify-between items-center">
                 <div>
                   <div className="text-sm font-medium text-green-800">
-                    🎟️ {appliedCoupon.code}
+                    ️ {appliedCoupon.code}
                   </div>
                   <div className="text-xs text-green-600">
                     {appliedCoupon.discountType === "percent"
@@ -701,4 +821,4 @@ export default function POS() {
       </div>
     </div>
   );
-                        }
+                    }
