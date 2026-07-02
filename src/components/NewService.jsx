@@ -7,6 +7,8 @@ import {
   where,
   getDocs,
   addDoc,
+  updateDoc,
+  doc,
   serverTimestamp
 } from "firebase/firestore";
 
@@ -32,7 +34,7 @@ export default function NewService() {
   const branchName = BRANCHES[branchId] || "Sucursal";
 
   // Modo de búsqueda
-  const [searchMode, setSearchMode] = useState("pet"); // "pet" o "owner"
+  const [searchMode, setSearchMode] = useState("pet");
 
   // Búsqueda por mascota
   const [searchPetName, setSearchPetName] = useState("");
@@ -65,6 +67,15 @@ export default function NewService() {
   const [petBreed, setPetBreed] = useState("");
   const [petNotes, setPetNotes] = useState("");
 
+  // Historia clínica
+  const [showClinicalForm, setShowClinicalForm] = useState(false);
+  const [birthDate, setBirthDate] = useState("");
+  const [weight, setWeight] = useState("");
+  const [sex, setSex] = useState("macho");
+  const [sterilized, setSterilized] = useState(false);
+  const [allergies, setAllergies] = useState("");
+  const [preexistingConditions, setPreexistingConditions] = useState("");
+
   // Servicio
   const [serviceType, setServiceType] = useState("bano");
   const [modality, setModality] = useState("sucursal");
@@ -82,6 +93,7 @@ export default function NewService() {
     setSelectedOwner(null);
     setShowNewOwnerForm(false);
     setShowNewPetForm(false);
+    setShowClinicalForm(false);
 
     try {
       const petsRef = collection(db, "pets");
@@ -128,6 +140,7 @@ export default function NewService() {
     setSelectedOwner(null);
     setShowNewOwnerForm(false);
     setShowNewPetForm(false);
+    setShowClinicalForm(false);
 
     try {
       const ownersRef = collection(db, "owners");
@@ -146,7 +159,6 @@ export default function NewService() {
         const results = [];
         for (const ownerDoc of snapshot.docs) {
           const owner = { id: ownerDoc.id, ...ownerDoc.data() };
-          // Obtener mascotas de este dueño
           const petsSnapshot = await getDocs(
             query(collection(db, "pets"), where("ownerId", "==", owner.id))
           );
@@ -167,7 +179,7 @@ export default function NewService() {
     }
   };
 
-  // Seleccionar mascota de resultados de búsqueda por mascota
+  // Seleccionar mascota de resultados
   const handleSelectPet = (result) => {
     setSelectedPet(result.pet);
     setSelectedOwner(result.owner);
@@ -175,15 +187,20 @@ export default function NewService() {
     setShowNewOwnerForm(false);
     setShowNewPetForm(false);
     setMessage("");
+
+    if (!result.pet.weight && !result.pet.birthDate) {
+      setShowClinicalForm(true);
+    }
   };
 
-  // Seleccionar dueño de resultados de búsqueda por dueño
+  // Seleccionar dueño
   const handleSelectOwner = (result) => {
     setSelectedOwner(result.owner);
     setSelectedPet(null);
     setOwnerResults([]);
     setShowNewOwnerForm(false);
     setShowNewPetForm(true);
+    setShowClinicalForm(false);
     setMessage("");
   };
 
@@ -192,6 +209,43 @@ export default function NewService() {
     setSelectedPet(pet);
     setShowNewPetForm(false);
     setMessage("");
+
+    if (!pet.weight && !pet.birthDate) {
+      setShowClinicalForm(true);
+    }
+  };
+
+  // Guardar historia clínica
+  const handleSaveClinical = async () => {
+    if (!selectedPet) return;
+
+    try {
+      await updateDoc(doc(db, "pets", selectedPet.id), {
+        birthDate: birthDate ? new Date(birthDate) : null,
+        weight: weight ? parseFloat(weight) : null,
+        sex,
+        sterilized,
+        allergies: allergies.trim(),
+        preexistingConditions: preexistingConditions.trim(),
+        updatedAt: serverTimestamp()
+      });
+
+      setSelectedPet({
+        ...selectedPet,
+        birthDate,
+        weight,
+        sex,
+        sterilized,
+        allergies,
+        preexistingConditions
+      });
+
+      setShowClinicalForm(false);
+      setMessage("✅ Historia clínica guardada");
+    } catch (error) {
+      console.error("Error guardando historia clínica:", error);
+      setMessage("❌ Error al guardar historia clínica");
+    }
   };
 
   // Registrar servicio
@@ -211,7 +265,6 @@ export default function NewService() {
           return;
         }
 
-        // Crear dueño
         const ownerRef = await addDoc(collection(db, "owners"), {
           name: ownerName.trim(),
           nameLower: ownerName.trim().toLowerCase(),
@@ -221,8 +274,7 @@ export default function NewService() {
         });
         finalOwnerId = ownerRef.id;
 
-        // Crear mascota
-        const petRef = await addDoc(collection(db, "pets"), {
+        const petData = {
           ownerId: finalOwnerId,
           name: petName.trim(),
           nameLower: petName.trim().toLowerCase(),
@@ -230,7 +282,18 @@ export default function NewService() {
           breed: petBreed.trim(),
           notes: petNotes.trim(),
           createdAt: serverTimestamp()
-        });
+        };
+
+        if (showClinicalForm) {
+          petData.birthDate = birthDate ? new Date(birthDate) : null;
+          petData.weight = weight ? parseFloat(weight) : null;
+          petData.sex = sex;
+          petData.sterilized = sterilized;
+          petData.allergies = allergies.trim();
+          petData.preexistingConditions = preexistingConditions.trim();
+        }
+
+        const petRef = await addDoc(collection(db, "pets"), petData);
         finalPetId = petRef.id;
       }
 
@@ -242,8 +305,7 @@ export default function NewService() {
           return;
         }
 
-        // Crear nueva mascota para el dueño existente
-        const petRef = await addDoc(collection(db, "pets"), {
+        const petData = {
           ownerId: selectedOwner.id,
           name: newPetName.trim(),
           nameLower: newPetName.trim().toLowerCase(),
@@ -251,7 +313,18 @@ export default function NewService() {
           breed: newPetBreed.trim(),
           notes: newPetNotes.trim(),
           createdAt: serverTimestamp()
-        });
+        };
+
+        if (showClinicalForm) {
+          petData.birthDate = birthDate ? new Date(birthDate) : null;
+          petData.weight = weight ? parseFloat(weight) : null;
+          petData.sex = sex;
+          petData.sterilized = sterilized;
+          petData.allergies = allergies.trim();
+          petData.preexistingConditions = preexistingConditions.trim();
+        }
+
+        const petRef = await addDoc(collection(db, "pets"), petData);
         finalPetId = petRef.id;
       }
 
@@ -284,6 +357,7 @@ export default function NewService() {
       setOwnerResults([]);
       setShowNewOwnerForm(false);
       setShowNewPetForm(false);
+      setShowClinicalForm(false);
       setOwnerName("");
       setOwnerPhone("");
       setOwnerAddress("");
@@ -293,6 +367,12 @@ export default function NewService() {
       setNewPetName("");
       setNewPetBreed("");
       setNewPetNotes("");
+      setBirthDate("");
+      setWeight("");
+      setSex("macho");
+      setSterilized(false);
+      setAllergies("");
+      setPreexistingConditions("");
     } catch (error) {
       console.error("Error creando servicio:", error);
       setMessage("❌ Error al registrar. Intenta de nuevo.");
@@ -301,8 +381,7 @@ export default function NewService() {
     }
   };
 
-  return (
-    <div className="space-y-6">
+  return (<div className="space-y-6">
       {/* Info de sucursal */}
       <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
         <p className="text-sm text-indigo-700">
@@ -344,7 +423,6 @@ export default function NewService() {
           </button>
         </div>
 
-        {/* Búsqueda por mascota */}
         {searchMode === "pet" && (
           <div className="flex gap-2">
             <input
@@ -365,7 +443,6 @@ export default function NewService() {
           </div>
         )}
 
-        {/* Búsqueda por dueño */}
         {searchMode === "owner" && (
           <div className="flex gap-2">
             <input
@@ -457,6 +534,9 @@ export default function NewService() {
           <h3 className="font-semibold text-green-800">Mascota seleccionada:</h3>
           <p className="text-sm">🐕 {selectedPet.name} · {selectedPet.type} · {selectedPet.breed || "Sin raza"}</p>
           <p className="text-sm text-gray-600">👤 {selectedOwner.name} · 📞 {selectedOwner.phone}</p>
+          {selectedPet.weight && (
+            <p className="text-xs text-gray-500 mt-1">⚖️ {selectedPet.weight} kg</p>
+          )}
           <button
             onClick={() => {
               setSelectedPet(null);
@@ -465,6 +545,90 @@ export default function NewService() {
             className="text-xs text-red-500 mt-1 underline"
           >
             Cambiar selección
+          </button>
+        </div>
+      )}
+
+      {/* Formulario historia clínica */}
+      {showClinicalForm && selectedPet && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+          <h3 className="text-lg font-semibold text-blue-800">📋 Historia Clínica</h3>
+          <p className="text-xs text-blue-600">Completa los datos clínicos de la mascota</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento</label>
+              <input
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Peso (kg)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Sexo</label>
+              <select
+                value={sex}
+                onChange={(e) => setSex(e.target.value)}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              >
+                <option value="macho">Macho</option>
+                <option value="hembra">Hembra</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={sterilized}
+                  onChange={(e) => setSterilized(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm">Esterilizado/a</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Alergias</label>
+            <textarea
+              value={allergies}
+              onChange={(e) => setAllergies(e.target.value)}
+              rows="2"
+              className="w-full border rounded-md px-3 py-2 text-sm"
+              placeholder="Ej: Alérgico al pollo..."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Condiciones preexistentes</label>
+            <textarea
+              value={preexistingConditions}
+              onChange={(e) => setPreexistingConditions(e.target.value)}
+              rows="2"
+              className="w-full border rounded-md px-3 py-2 text-sm"
+              placeholder="Ej: Problemas de piel..."
+            />
+          </div>
+
+          <button
+            onClick={handleSaveClinical}
+            className="w-full bg-blue-600 text-white py-2 rounded-md text-sm hover:bg-blue-700"
+          >
+            💾 Guardar Historia Clínica
           </button>
         </div>
       )}
@@ -525,11 +689,18 @@ export default function NewService() {
           </div>
 
           <button
+            onClick={() => setShowClinicalForm(true)}
+            className="text-xs text-blue-600 underline"
+          >
+            📋 Agregar historia clínica
+          </button>
+
+          <button
             onClick={() => {
               setShowNewPetForm(false);
               setSelectedOwner(null);
             }}
-            className="text-xs text-red-500 underline"
+            className="text-xs text-red-500 underline block mt-2"
           >
             Cancelar y cambiar dueño
           </button>
@@ -616,6 +787,13 @@ export default function NewService() {
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
             />
           </div>
+
+          <button
+            onClick={() => setShowClinicalForm(true)}
+            className="text-xs text-blue-600 underline"
+          >
+            📋 Agregar historia clínica
+          </button>
         </div>
       )}
 
@@ -676,4 +854,4 @@ export default function NewService() {
       )}
     </div>
   );
-}
+                }
