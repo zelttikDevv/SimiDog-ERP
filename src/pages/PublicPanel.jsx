@@ -46,7 +46,7 @@ export default function PublicPanel() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [, setTick] = useState(0);
 
-  // Cronómetro en vivo (actualiza cada segundo)
+  // Cronómetro en vivo
   useEffect(() => {
     const interval = setInterval(() => {
       setTick((t) => t + 1);
@@ -140,7 +140,7 @@ export default function PublicPanel() {
         </div>
       </div>
 
-      {/* Contenido */}
+      {/* Contenido - Grid cuadrado */}
       <main className="max-w-7xl mx-auto px-6 pb-8">
         {loading ? (
           <div className="text-center py-12 text-gray-400">Cargando...</div>
@@ -151,42 +151,42 @@ export default function PublicPanel() {
             <p className="text-gray-500 mt-2">Las mascotas aparecerán aquí cuando lleguen</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {services.map((service) => {
               const statusInfo = STATUS_CONFIG[service.status] || STATUS_CONFIG.esperando_turno;
               
               return (
                 <div
                   key={service.id}
-                  className="bg-gray-800 rounded-lg overflow-hidden shadow-lg border border-gray-700"
+                  className="bg-gray-800 rounded-lg overflow-hidden shadow-lg border border-gray-700 aspect-square flex flex-col"
                 >
                   {/* Status bar */}
-                  <div className={`${statusInfo.bg} px-4 py-2 flex justify-between items-center`}>
-                    <span className="font-semibold text-sm">
+                  <div className={`${statusInfo.bg} px-3 py-2 flex justify-between items-center`}>
+                    <span className="font-semibold text-xs truncate">
                       {statusInfo.icon} {statusInfo.label}
                     </span>
-                    <span className="text-xs opacity-90">
-                      {service.modality === "domicilio" ? "🚗 Domicilio" : "🏪 Sucursal"}
+                    <span className="text-xs opacity-90 ml-1">
+                      {service.modality === "domicilio" ? "🚗" : "🏪"}
                     </span>
                   </div>
 
-                  {/* Content */}
-                  <div className="p-4 space-y-3">
+                  {/* Content - distribuido para llenar el cuadrado */}
+                  <div className="flex-1 p-3 flex flex-col justify-between">
                     {/* Mascota */}
                     <div>
-                      <h3 className="text-2xl font-bold">🐾 {service.petName}</h3>
-                      <p className="text-sm text-gray-400">👤 {service.ownerName}</p>
+                      <h3 className="text-lg font-bold truncate">🐾 {service.petName}</h3>
+                      <p className="text-xs text-gray-400 truncate">👤 {service.ownerName}</p>
                     </div>
 
                     {/* Servicio */}
-                    <div className="text-sm text-gray-300">
+                    <div className="text-xs text-gray-300">
                       {SERVICE_LABELS[service.serviceType]}
                     </div>
 
-                    {/* Cronómetro */}
-                    <div className="bg-gray-900 rounded-md p-3 text-center">
-                      <div className="text-xs text-gray-500 uppercase tracking-wide">Tiempo en sucursal</div>
-                      <div className="text-3xl font-mono font-bold text-white mt-1">
+                    {/* Cronómetro - destacado */}
+                    <div className="bg-gray-900 rounded-md p-2 text-center">
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wide">Tiempo</div>
+                      <div className="text-xl font-mono font-bold text-white">
                         {getTimeElapsed(service.arrivalTime)}
                       </div>
                     </div>
@@ -199,4 +199,4 @@ export default function PublicPanel() {
       </main>
     </div>
   );
-            }
+                             }
