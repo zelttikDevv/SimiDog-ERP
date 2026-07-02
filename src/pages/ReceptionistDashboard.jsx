@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import NewService from "../components/NewService";
 import ActiveServices from "../components/ActiveServices";
 import Inventory from "../components/Inventory";
+import Consumptions from "../components/Consumptions";
 
 export default function ReceptionistDashboard() {
   const [activeTab, setActiveTab] = useState("new");
@@ -46,7 +47,7 @@ export default function ReceptionistDashboard() {
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
-            ➕ Nuevo Servicio
+            ➕ Nuevo
           </button>
           <button
             onClick={() => setActiveTab("active")}
@@ -56,7 +57,7 @@ export default function ReceptionistDashboard() {
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
-            📋 Servicios Activos
+            📋 Activos
           </button>
           <button
             onClick={() => setActiveTab("inventory")}
@@ -68,6 +69,16 @@ export default function ReceptionistDashboard() {
           >
             📦 Inventario
           </button>
+          <button
+            onClick={() => setActiveTab("consumptions")}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "consumptions"
+                ? "border-indigo-500 text-indigo-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            📥 Consumos
+          </button>
         </div>
       </div>
 
@@ -76,6 +87,7 @@ export default function ReceptionistDashboard() {
         {activeTab === "new" && <NewService />}
         {activeTab === "active" && <ActiveServices />}
         {activeTab === "inventory" && <Inventory />}
+        {activeTab === "consumptions" && <Consumptions />}
       </main>
     </div>
   );
