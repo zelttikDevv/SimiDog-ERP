@@ -15,10 +15,11 @@ export function AuthProvider({ children }) {
       setCurrentUser(user);
       
       if (user) {
-        // Obtener datos del usuario desde Firestore
         const userDoc = await getDoc(doc(db, "users", user.uid));
         if (userDoc.exists()) {
           setUserData(userDoc.data());
+        } else {
+          setUserData(null);
         }
       } else {
         setUserData(null);
