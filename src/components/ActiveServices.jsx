@@ -84,6 +84,21 @@ export default function ActiveServices() {
     await updateDoc(doc(db, "services", serviceId), updateData);
   };
 
+  // Marcar servicio como completado (sin cobrar)
+  const handleCompleteService = async (serviceId) => {
+    if (!confirm("¿Marcar este servicio como completado? El cobro se realizará desde el POS.")) return;
+    
+    try {
+      await updateDoc(doc(db, "services", serviceId), {
+        status: "completado",
+        endTime: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error completando servicio:", error);
+      alert("Error al completar el servicio");
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Cargando servicios...</div>;
   }
@@ -148,9 +163,19 @@ export default function ActiveServices() {
                 ))}
               </div>
             </div>
+
+            {/* Botón completar servicio */}
+            <div className="border-t pt-3 mt-3">
+              <button
+                onClick={() => handleCompleteService(service.id)}
+                className="w-full bg-green-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+              >
+                ✅ Servicio completado - Ir al POS
+              </button>
+            </div>
           </div>
         );
       })}
     </div>
   );
-                    }
+}
