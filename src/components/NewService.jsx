@@ -31,15 +31,32 @@ export default function NewService() {
   const branchId = userData?.branchId || "sucursal-11av";
   const branchName = BRANCHES[branchId] || "Sucursal";
 
-  // Búsqueda
-  const [searchName, setSearchName] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
+  // Modo de búsqueda
+  const [searchMode, setSearchMode] = useState("pet"); // "pet" o "owner"
+
+  // Búsqueda por mascota
+  const [searchPetName, setSearchPetName] = useState("");
+  const [petResults, setPetResults] = useState([]);
+  const [searchingPet, setSearchingPet] = useState(false);
+
+  // Búsqueda por dueño
+  const [searchOwnerName, setSearchOwnerName] = useState("");
+  const [ownerResults, setOwnerResults] = useState([]);
+  const [searchingOwner, setSearchingOwner] = useState(false);
+
+  // Mascota/dueño seleccionado
   const [selectedPet, setSelectedPet] = useState(null);
   const [selectedOwner, setSelectedOwner] = useState(null);
 
-  // Formulario nuevo dueño/mascota
-  const [showNewForm, setShowNewForm] = useState(false);
+  // Formulario nueva mascota (para dueño existente)
+  const [showNewPetForm, setShowNewPetForm] = useState(false);
+  const [newPetName, setNewPetName] = useState("");
+  const [newPetType, setNewPetType] = useState("perro");
+  const [newPetBreed, setNewPetBreed] = useState("");
+  const [newPetNotes, setNewPetNotes] = useState("");
+
+  // Formulario nuevo dueño + mascota
+  const [showNewOwnerForm, setShowNewOwnerForm] = useState(false);
   const [ownerName, setOwnerName] = useState("");
   const [ownerPhone, setOwnerPhone] = useState("");
   const [ownerAddress, setOwnerAddress] = useState("");
@@ -57,48 +74,123 @@ export default function NewService() {
   const [message, setMessage] = useState("");
 
   // Buscar mascota por nombre
-  const handleSearch = async () => {
-    if (!searchName.trim()) return;
-    setSearching(true);
-    setSearchResults([]);
+  const handleSearchPet = async () => {
+    if (!searchPetName.trim()) return;
+    setSearchingPet(true);
+    setPetResults([]);
     setSelectedPet(null);
     setSelectedOwner(null);
-    setShowNewForm(false);
+    setShowNewOwnerForm(false);
+    setShowNewPetForm(false);
 
     try {
       const petsRef = collection(db, "pets");
-      const q = query(petsRef, where("nameLower", ">=", searchName.toLowerCase()), where("nameLower", "<=", searchName.toLowerCase() + "\uf8ff"));
+      const q = query(
+        petsRef,
+        where("nameLower", ">=", searchPetName.toLowerCase()),
+        where("nameLower", "<=", searchPetName.toLowerCase() + "\uf8ff")
+      );
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
         setMessage("No se encontró ninguna mascota con ese nombre.");
-        setShowNewForm(true);
-        setPetName(searchName);
+        setShowNewOwnerForm(true);
+        setPetName(searchPetName);
       } else {
         const results = [];
         for (const petDoc of snapshot.docs) {
           const pet = { id: petDoc.id, ...petDoc.data() };
-          const ownerDoc = await getDocs(query(collection(db, "owners"), where("__name__", "==", pet.ownerId)));
-          const owner = ownerDoc.empty ? null : { id: ownerDoc.docs[0].id, ...ownerDoc.docs[0].data() };
+          const ownerDoc = await getDocs(
+            query(collection(db, "owners"), where("__name__", "==", pet.ownerId))
+          );
+          const owner = ownerDoc.empty
+            ? null
+            : { id: ownerDoc.docs[0].id, ...ownerDoc.docs[0].data() };
           results.push({ pet, owner });
         }
-        setSearchResults(results);
+        setPetResults(results);
         setMessage("");
       }
     } catch (error) {
-      console.error("Error buscando:", error);
+      console.error("Error buscando mascota:", error);
       setMessage("Error al buscar. Intenta de nuevo.");
     } finally {
-      setSearching(false);
+      setSearchingPet(false);
     }
   };
 
-  // Seleccionar mascota encontrada
+  // Buscar dueño por nombre
+  const handleSearchOwner = async () => {
+    if (!searchOwnerName.trim()) return;
+    setSearchingOwner(true);
+    setOwnerResults([]);
+    setSelectedPet(null);
+    setSelectedOwner(null);
+    setShowNewOwnerForm(false);
+    setShowNewPetForm(false);
+
+    try {
+      const ownersRef = collection(db, "owners");
+      const q = query(
+        ownersRef,
+        where("nameLower", ">=", searchOwnerName.toLowerCase()),
+        where("nameLower", "<=", searchOwnerName.toLowerCase() + "\uf8ff")
+      );
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        setMessage("No se encontró ningún dueño con ese nombre.");
+        setShowNewOwnerForm(true);
+        setOwnerName(searchOwnerName);
+      } else {
+        const results = [];
+        for (const ownerDoc of snapshot.docs) {
+          const owner = { id: ownerDoc.id, ...ownerDoc.data() };
+          // Obtener mascotas de este dueño
+          const petsSnapshot = await getDocs(
+            query(collection(db, "pets"), where("ownerId", "==", owner.id))
+          );
+          const pets = petsSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          results.push({ owner, pets });
+        }
+        setOwnerResults(results);
+        setMessage("");
+      }
+    } catch (error) {
+      console.error("Error buscando dueño:", error);
+      setMessage("Error al buscar. Intenta de nuevo.");
+    } finally {
+      setSearchingOwner(false);
+    }
+  };
+
+  // Seleccionar mascota de resultados de búsqueda por mascota
   const handleSelectPet = (result) => {
     setSelectedPet(result.pet);
     setSelectedOwner(result.owner);
-    setSearchResults([]);
-    setShowNewForm(false);
+    setPetResults([]);
+    setShowNewOwnerForm(false);
+    setShowNewPetForm(false);
+    setMessage("");
+  };
+
+  // Seleccionar dueño de resultados de búsqueda por dueño
+  const handleSelectOwner = (result) => {
+    setSelectedOwner(result.owner);
+    setSelectedPet(null);
+    setOwnerResults([]);
+    setShowNewOwnerForm(false);
+    setShowNewPetForm(true);
+    setMessage("");
+  };
+
+  // Seleccionar mascota existente del dueño
+  const handleSelectExistingPet = (pet) => {
+    setSelectedPet(pet);
+    setShowNewPetForm(false);
     setMessage("");
   };
 
@@ -111,8 +203,8 @@ export default function NewService() {
       let finalPetId = selectedPet?.id;
       let finalOwnerId = selectedOwner?.id;
 
-      // Si es nueva mascota, crear dueño y mascota
-      if (showNewForm || !selectedPet) {
+      // Si es nuevo dueño + nueva mascota
+      if (showNewOwnerForm && !selectedOwner) {
         if (!ownerName.trim() || !ownerPhone.trim() || !petName.trim()) {
           setMessage("Completa nombre del dueño, teléfono y nombre de la mascota.");
           setSaving(false);
@@ -122,6 +214,7 @@ export default function NewService() {
         // Crear dueño
         const ownerRef = await addDoc(collection(db, "owners"), {
           name: ownerName.trim(),
+          nameLower: ownerName.trim().toLowerCase(),
           phone: ownerPhone.trim(),
           address: ownerAddress.trim(),
           createdAt: serverTimestamp()
@@ -141,13 +234,34 @@ export default function NewService() {
         finalPetId = petRef.id;
       }
 
-      // Crear servicio (la sucursal viene del usuario logueado)
+      // Si es dueño existente + nueva mascota
+      if (showNewPetForm && selectedOwner && !selectedPet) {
+        if (!newPetName.trim()) {
+          setMessage("Completa el nombre de la mascota.");
+          setSaving(false);
+          return;
+        }
+
+        // Crear nueva mascota para el dueño existente
+        const petRef = await addDoc(collection(db, "pets"), {
+          ownerId: selectedOwner.id,
+          name: newPetName.trim(),
+          nameLower: newPetName.trim().toLowerCase(),
+          type: newPetType,
+          breed: newPetBreed.trim(),
+          notes: newPetNotes.trim(),
+          createdAt: serverTimestamp()
+        });
+        finalPetId = petRef.id;
+      }
+
+      // Crear servicio
       await addDoc(collection(db, "services"), {
         petId: finalPetId,
-        petName: selectedPet?.name || petName.trim(),
+        petName: selectedPet?.name || petName.trim() || newPetName.trim(),
         ownerName: selectedOwner?.name || ownerName.trim(),
         ownerPhone: selectedOwner?.phone || ownerPhone.trim(),
-        branchId: branchId, // ← Sucursal del usuario logueado
+        branchId: branchId,
         serviceType,
         modality,
         status: "esperando_turno",
@@ -160,17 +274,25 @@ export default function NewService() {
       });
 
       setMessage("✅ Servicio registrado exitosamente.");
-      // Limpiar formulario
-      setSearchName("");
+      
+      // Limpiar todo
+      setSearchPetName("");
+      setSearchOwnerName("");
       setSelectedPet(null);
       setSelectedOwner(null);
-      setShowNewForm(false);
+      setPetResults([]);
+      setOwnerResults([]);
+      setShowNewOwnerForm(false);
+      setShowNewPetForm(false);
       setOwnerName("");
       setOwnerPhone("");
       setOwnerAddress("");
       setPetName("");
       setPetBreed("");
       setPetNotes("");
+      setNewPetName("");
+      setNewPetBreed("");
+      setNewPetNotes("");
     } catch (error) {
       console.error("Error creando servicio:", error);
       setMessage("❌ Error al registrar. Intenta de nuevo.");
@@ -188,34 +310,89 @@ export default function NewService() {
         </p>
       </div>
 
-      {/* Buscar mascota */}
+      {/* Selector de modo de búsqueda */}
       <div className="bg-white rounded-lg shadow p-4">
-        <h2 className="text-lg font-semibold mb-3">Buscar Mascota</h2>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Nombre de la mascota..."
-            value={searchName}
-            onChange={(e) => setSearchName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-          />
+        <h2 className="text-lg font-semibold mb-3">Buscar</h2>
+        <div className="flex gap-2 mb-4">
           <button
-            onClick={handleSearch}
-            disabled={searching}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50"
+            onClick={() => {
+              setSearchMode("pet");
+              setOwnerResults([]);
+              setShowNewPetForm(false);
+            }}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              searchMode === "pet"
+                ? "bg-indigo-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
           >
-            {searching ? "Buscando..." : "Buscar"}
+            🐾 Por Mascota
+          </button>
+          <button
+            onClick={() => {
+              setSearchMode("owner");
+              setPetResults([]);
+              setShowNewOwnerForm(false);
+            }}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              searchMode === "owner"
+                ? "bg-indigo-600 text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            👤 Por Dueño
           </button>
         </div>
+
+        {/* Búsqueda por mascota */}
+        {searchMode === "pet" && (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Nombre de la mascota..."
+              value={searchPetName}
+              onChange={(e) => setSearchPetName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearchPet()}
+              className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <button
+              onClick={handleSearchPet}
+              disabled={searchingPet}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {searchingPet ? "Buscando..." : "Buscar"}
+            </button>
+          </div>
+        )}
+
+        {/* Búsqueda por dueño */}
+        {searchMode === "owner" && (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Nombre del dueño..."
+              value={searchOwnerName}
+              onChange={(e) => setSearchOwnerName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearchOwner()}
+              className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <button
+              onClick={handleSearchOwner}
+              disabled={searchingOwner}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {searchingOwner ? "Buscando..." : "Buscar"}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Resultados de búsqueda */}
-      {searchResults.length > 0 && (
+      {/* Resultados de búsqueda por mascota */}
+      {petResults.length > 0 && (
         <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="text-sm font-semibold text-gray-600 mb-2">Resultados:</h3>
+          <h3 className="text-sm font-semibold text-gray-600 mb-2">Mascotas encontradas:</h3>
           <div className="space-y-2">
-            {searchResults.map((result) => (
+            {petResults.map((result) => (
               <button
                 key={result.pet.id}
                 onClick={() => handleSelectPet(result)}
@@ -236,27 +413,133 @@ export default function NewService() {
         </div>
       )}
 
+      {/* Resultados de búsqueda por dueño */}
+      {ownerResults.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <h3 className="text-sm font-semibold text-gray-600 mb-2">Dueños encontrados:</h3>
+          <div className="space-y-3">
+            {ownerResults.map((result) => (
+              <div key={result.owner.id} className="border rounded-md p-3">
+                <div className="font-medium mb-2">👤 {result.owner.name}</div>
+                <div className="text-sm text-gray-500 mb-2">
+                  📞 {result.owner.phone}
+                  {result.owner.address && ` · 📍 ${result.owner.address}`}
+                </div>
+                {result.pets.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-600 font-semibold">Mascotas:</div>
+                    {result.pets.map((pet) => (
+                      <button
+                        key={pet.id}
+                        onClick={() => handleSelectExistingPet(pet)}
+                        className="w-full text-left bg-gray-50 hover:bg-indigo-50 rounded px-2 py-1 text-sm transition-colors"
+                      >
+                        🐕 {pet.name} · {pet.type} · {pet.breed || "Sin raza"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={() => handleSelectOwner(result)}
+                  className="mt-2 w-full bg-indigo-600 text-white py-1.5 rounded-md text-sm hover:bg-indigo-700"
+                >
+                  ➕ Agregar nueva mascota a este dueño
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Mascota seleccionada */}
-      {selectedPet && (
+      {selectedPet && selectedOwner && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <h3 className="font-semibold text-green-800">Mascota seleccionada:</h3>
           <p className="text-sm">🐕 {selectedPet.name} · {selectedPet.type} · {selectedPet.breed || "Sin raza"}</p>
-          {selectedOwner && (
-            <p className="text-sm text-gray-600">👤 {selectedOwner.name} · 📞 {selectedOwner.phone}</p>
-          )}
+          <p className="text-sm text-gray-600">👤 {selectedOwner.name} · 📞 {selectedOwner.phone}</p>
           <button
-            onClick={() => { setSelectedPet(null); setSelectedOwner(null); }}
+            onClick={() => {
+              setSelectedPet(null);
+              setSelectedOwner(null);
+            }}
             className="text-xs text-red-500 mt-1 underline"
           >
-            Cambiar mascota
+            Cambiar selección
           </button>
         </div>
       )}
 
-      {/* Formulario nueva mascota */}
-      {showNewForm && (
+      {/* Formulario nueva mascota para dueño existente */}
+      {showNewPetForm && selectedOwner && !selectedPet && (
         <div className="bg-white rounded-lg shadow p-4 space-y-4">
-          <h3 className="text-lg font-semibold">Nueva Mascota y Dueño</h3>
+          <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-3">
+            <p className="text-sm text-blue-700">
+              👤 Dueño: <strong>{selectedOwner.name}</strong> · 📞 {selectedOwner.phone}
+            </p>
+          </div>
+
+          <h3 className="text-lg font-semibold">Nueva Mascota</h3>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de la mascota *</label>
+            <input
+              type="text"
+              value={newPetName}
+              onChange={(e) => setNewPetName(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+              <select
+                value={newPetType}
+                onChange={(e) => setNewPetType(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              >
+                <option value="perro">Perro</option>
+                <option value="gato">Gato</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Raza</label>
+              <input
+                type="text"
+                value={newPetBreed}
+                onChange={(e) => setNewPetBreed(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+            <textarea
+              value={newPetNotes}
+              onChange={(e) => setNewPetNotes(e.target.value)}
+              rows="2"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            />
+          </div>
+
+          <button
+            onClick={() => {
+              setShowNewPetForm(false);
+              setSelectedOwner(null);
+            }}
+            className="text-xs text-red-500 underline"
+          >
+            Cancelar y cambiar dueño
+          </button>
+        </div>
+      )}
+
+      {/* Formulario nuevo dueño + mascota */}
+      {showNewOwnerForm && (
+        <div className="bg-white rounded-lg shadow p-4 space-y-4">
+          <h3 className="text-lg font-semibold">Nuevo Dueño y Mascota</h3>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del dueño *</label>
@@ -337,7 +620,7 @@ export default function NewService() {
       )}
 
       {/* Configurar servicio */}
-      {(selectedPet || showNewForm) && (
+      {(selectedPet || showNewPetForm || showNewOwnerForm) && (
         <div className="bg-white rounded-lg shadow p-4 space-y-4">
           <h3 className="text-lg font-semibold">Detalles del Servicio</h3>
 
@@ -379,10 +662,18 @@ export default function NewService() {
 
       {/* Mensajes */}
       {message && (
-        <div className={`p-3 rounded-md text-sm ${message.startsWith("✅") ? "bg-green-50 text-green-700" : message.startsWith("❌") ? "bg-red-50 text-red-700" : "bg-yellow-50 text-yellow-700"}`}>
+        <div
+          className={`p-3 rounded-md text-sm ${
+            message.startsWith("✅")
+              ? "bg-green-50 text-green-700"
+              : message.startsWith("❌")
+              ? "bg-red-50 text-red-700"
+              : "bg-yellow-50 text-yellow-700"
+          }`}
+        >
           {message}
         </div>
       )}
     </div>
   );
-  }
+}
