@@ -5,7 +5,6 @@ import {
   collection,
   query,
   where,
-  orderBy,
   onSnapshot,
   doc,
   updateDoc,
@@ -64,15 +63,23 @@ export default function ActiveServices() {
   useEffect(() => {
     const q = query(
       collection(db, "services"),
-      where("branchId", "==", branchId),
-      orderBy("arrivalTime", "desc")
+      where("branchId", "==", branchId)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((s) => s.status !== "completado");
+        .filter((s) => s.status !== "completado")
+        // Ordenar por arrivalTime en el cliente
+        .sort((a, b) => {
+          const aTime = a.arrivalTime?.toMillis?.() || 0;
+          const bTime = b.arrivalTime?.toMillis?.() || 0;
+          return bTime - aTime; // Más reciente primero
+        });
       setServices(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error en listener:", error);
       setLoading(false);
     });
 
@@ -118,13 +125,11 @@ export default function ActiveServices() {
         </div>
       )}
 
-      {/* Lista de servicios */}
       {services.map((service) => {
         const statusInfo = STATUS_OPTIONS.find((s) => s.id === service.status) || STATUS_OPTIONS[0];
 
         return (
           <div key={service.id} className="bg-white rounded-lg shadow p-4 space-y-3">
-            {/* Header */}
             <div className="flex justify-between items-start">
               <div>
                 <h3 className="font-bold text-lg">🐾 {service.petName}</h3>
@@ -140,7 +145,6 @@ export default function ActiveServices() {
               </div>
             </div>
 
-            {/* Info */}
             <div className="flex gap-2 text-xs text-gray-500">
               <span className="bg-gray-100 px-2 py-1 rounded">{SERVICE_LABELS[service.serviceType]}</span>
               <span className="bg-gray-100 px-2 py-1 rounded">
@@ -148,7 +152,6 @@ export default function ActiveServices() {
               </span>
             </div>
 
-            {/* Acciones de estado */}
             <div className="flex flex-wrap gap-2">
               {STATUS_OPTIONS.filter((s) => s.id !== service.status).map((option) => (
                 <button
@@ -161,7 +164,6 @@ export default function ActiveServices() {
               ))}
             </div>
 
-            {/* Botón de salida */}
             {checkoutId !== service.id ? (
               <button
                 onClick={() => setCheckoutId(service.id)}
@@ -214,4 +216,4 @@ export default function ActiveServices() {
       })}
     </div>
   );
-        }
+                    }
