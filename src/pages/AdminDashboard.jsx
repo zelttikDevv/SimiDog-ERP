@@ -7,6 +7,7 @@ import AdminMetrics from "../components/AdminMetrics";
 import AdminUsers from "../components/AdminUsers";
 import Inventory from "../components/Inventory";
 import Consumptions from "../components/Consumptions";
+import CouponManager from "../components/CouponManager";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("metrics");
@@ -79,6 +80,16 @@ export default function AdminDashboard() {
           >
             📥 Consumos
           </button>
+          <button
+            onClick={() => setActiveTab("coupons")}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "coupons"
+                ? "border-indigo-500 text-indigo-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            🎟️ Cupones
+          </button>
         </div>
       </div>
 
@@ -88,6 +99,7 @@ export default function AdminDashboard() {
         {activeTab === "users" && <AdminUsers />}
         {activeTab === "inventory" && <Inventory />}
         {activeTab === "consumptions" && <Consumptions showReport={true} />}
+        {activeTab === "coupons" && <CouponManager />}
       </main>
     </div>
   );
