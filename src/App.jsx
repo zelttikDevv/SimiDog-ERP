@@ -6,7 +6,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import ReceptionistDashboard from "./pages/ReceptionistDashboard";
 import PublicPanel from "./pages/PublicPanel";
 import ChangePassword from "./pages/ChangePassword";
-import MVZDashboard from "./pages/MVZDashboard";  // ← Al inicio
+import MVZDashboard from "./pages/MVZDashboard";
 
 function AppContent() {
   const { currentUser, userData, loading } = useAuth();
@@ -25,16 +25,6 @@ function AppContent() {
         {/* Panel público (sin login) */}
         <Route path="/panel/:branch" element={<PublicPanel />} />
         
-        
-// Dentro de <Routes>, agrega:
-<Route
-  path="/mvz"
-  element={
-    <ProtectedRoute allowedRoles={["mvz", "admin"]}>
-      <MVZDashboard />
-    </ProtectedRoute>
-  }
-/>
         {/* Cambio de contraseña (requiere login) */}
         <Route
           path="/change-password"
@@ -48,7 +38,7 @@ function AppContent() {
           path="/login"
           element={
             currentUser ? (
-              <Navigate to={userData?.role === "admin" ? "/admin" : "/recepcion"} replace />
+              <Navigate to={userData?.role === "admin" ? "/admin" : userData?.role === "mvz" ? "/mvz" : "/recepcion"} replace />
             ) : (
               <Login />
             )
@@ -75,12 +65,30 @@ function AppContent() {
           }
         />
         
+        {/* Panel MVZ */}
+        <Route
+          path="/mvz"
+          element={
+            <ProtectedRoute allowedRoles={["mvz", "admin"]}>
+              <MVZDashboard />
+            </ProtectedRoute>
+          }
+        />
+        
         {/* Ruta raíz */}
         <Route
           path="/"
           element={
             <Navigate
-              to={currentUser ? (userData?.role === "admin" ? "/admin" : "/recepcion") : "/login"}
+              to={
+                currentUser
+                  ? userData?.role === "admin"
+                    ? "/admin"
+                    : userData?.role === "mvz"
+                    ? "/mvz"
+                    : "/recepcion"
+                  : "/login"
+              }
               replace
             />
           }
