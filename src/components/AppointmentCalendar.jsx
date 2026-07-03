@@ -50,6 +50,8 @@ export default function AppointmentCalendar() {
 
   // Cargar citas de la semana
   useEffect(() => {
+    if (!branchId) return;
+    
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
 
@@ -74,6 +76,8 @@ export default function AppointmentCalendar() {
 
   // Cargar MVZ de la sucursal
   useEffect(() => {
+    if (!branchId) return;
+    
     const q = query(
       collection(db, "users"),
       where("role", "==", "mvz"),
@@ -84,10 +88,11 @@ export default function AppointmentCalendar() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setMvzList(data);
-      // Si hay solo 1 MVZ, preseleccionarlo
       if (data.length === 1) {
         setSelectedMvzId(data[0].id);
       }
+    }, (error) => {
+      console.error("Error cargando MVZ:", error);
     });
 
     return unsubscribe;
@@ -128,7 +133,7 @@ export default function AppointmentCalendar() {
         results.push({ owner, pets });
       }
 
-      // Buscar mascotas por nombre (para encontrar dueños a través de ellas)
+      // Buscar mascotas por nombre
       const petsQuery = query(
         collection(db, "pets"),
         where("nameLower", ">=", term),
@@ -139,22 +144,18 @@ export default function AppointmentCalendar() {
       for (const petDoc of petsSnapshot.docs) {
         const pet = { id: petDoc.id, ...petDoc.data() };
         
-        // Si el dueño ya fue procesado, agregar la mascota a su lista
         if (processedOwners.has(pet.ownerId)) {
           const existing = results.find((r) => r.owner.id === pet.ownerId);
           if (existing && !existing.pets.find((p) => p.id === pet.id)) {
             existing.pets.push(pet);
           }
         } else {
-          // Dueño nuevo, buscarlo
-          const ownerRef = doc(db, "owners", pet.ownerId);
           const ownerSnap = await getDocs(query(collection(db, "owners"), where("__name__", "==", pet.ownerId)));
           
           if (!ownerSnap.empty) {
             const owner = { id: ownerSnap.docs[0].id, ...ownerSnap.docs[0].data() };
             processedOwners.add(owner.id);
             
-            // Buscar todas las mascotas de este dueño
             const allPetsQuery = query(
               collection(db, "pets"),
               where("ownerId", "==", owner.id)
@@ -167,31 +168,6 @@ export default function AppointmentCalendar() {
         }
       }
 
-      setSearchResults(results);
-    } catch (error) {
-      console.error("Error buscando:", error);
-    }
-  };
-
-    try {
-      const ownersQuery = query(
-        collection(db, "owners"),
-        where("nameLower", ">=", searchTerm.toLowerCase()),
-        where("nameLower", "<=", searchTerm.toLowerCase() + "\uf8ff")
-      );
-      const ownersSnapshot = await getDocs(ownersQuery);
-      
-      const results = [];
-      for (const ownerDoc of ownersSnapshot.docs) {
-        const owner = { id: ownerDoc.id, ...ownerDoc.data() };
-        const petsQuery = query(
-          collection(db, "pets"),
-          where("ownerId", "==", owner.id)
-        );
-        const petsSnapshot = await getDocs(petsQuery);
-        const pets = petsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        results.push({ owner, pets });
-      }
       setSearchResults(results);
     } catch (error) {
       console.error("Error buscando:", error);
@@ -388,7 +364,7 @@ export default function AppointmentCalendar() {
                         <div className="font-semibold truncate">{apt.petName}</div>
                         <div className="truncate text-[10px]">{apt.ownerName}</div>
                         {apt.mvzName && (
-                          <div className="truncate text-[10px] text-gray-600">‍⚕️ {apt.mvzName}</div>
+                          <div className="truncate text-[10px] text-gray-600">👨‍⚕️ {apt.mvzName}</div>
                         )}
                         {apt.isUrgent && (
                           <div className="text-[10px] font-bold text-red-600">🚨 URGENTE</div>
@@ -475,7 +451,7 @@ export default function AppointmentCalendar() {
               <label className="block text-sm font-medium text-gray-700 mb-1">MVZ asignado *</label>
               {mvzList.length === 1 ? (
                 <div className="bg-gray-100 rounded-md px-3 py-2 text-sm">
-                  👨‍⚕️ {mvzList[0].email || mvzList[0].fullName} (único MVZ de la sucursal)
+                  👨‍️ {mvzList[0].email || mvzList[0].fullName} (único MVZ de la sucursal)
                 </div>
               ) : (
                 <select
@@ -486,7 +462,7 @@ export default function AppointmentCalendar() {
                   <option value="">Selecciona un MVZ...</option>
                   {mvzList.map((mvz) => (
                     <option key={mvz.id} value={mvz.id}>
-                      ‍⚕️ {mvz.email || mvz.fullName}
+                      👨‍️ {mvz.email || mvz.fullName}
                     </option>
                   ))}
                 </select>
