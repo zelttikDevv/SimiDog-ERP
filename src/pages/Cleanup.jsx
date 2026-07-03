@@ -14,20 +14,6 @@ import {
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 
-const COLECCIONES_A_ELIMINAR = [
-  'cash_registers', 'coupons', 'internal_consumptions',
-  'owners', 'pets', 'products', 'services',
-  'transactions', 'vet_services', 'appointments',
-  'medical_services', 'bath_services', 'mvz_schedules', 'consumptions'
-];
-
-const NUEVOS_USUARIOS = [
-  { email: 'mvz1@simidog.com', password: 'mvz123456', role: 'mvz', branchId: 'sucursal-11av' },
-  { email: 'mvz2@simidog.com', password: 'mvz123456', role: 'mvz', branchId: 'sucursal-65av' },
-  { email: 'recep1@simidog.com', password: 'recep123456', role: 'recepcionista', branchId: 'sucursal-11av' },
-  { email: 'recep2@simidog.com', password: 'recep123456', role: 'recepcionista', branchId: 'sucursal-65av' }
-];
-
 export default function Cleanup() {
   const [logs, setLogs] = useState([]);
   const [running, setRunning] = useState(false);
@@ -39,10 +25,9 @@ export default function Cleanup() {
   const runCleanup = async () => {
     setRunning(true);
     setLogs([]);
-    log(" Iniciando limpieza total...");
+    log("🚀 Continuando limpieza...");
 
     try {
-      // Verificar admin logueado
       if (!auth.currentUser) {
         log("❌ Debes iniciar sesión como admin primero");
         setRunning(false);
@@ -50,79 +35,9 @@ export default function Cleanup() {
       }
       log(`✅ Admin logueado: ${auth.currentUser.email}`);
 
-      // PASO 1: Eliminar colecciones
-      log("\n🗑️ Eliminando colecciones...");
-      for (const coleccion of COLECCIONES_A_ELIMINAR) {
-        try {
-          const snapshot = await getDocs(collection(db, coleccion));
-          const batch = writeBatch(db);
-          snapshot.docs.forEach((d) => batch.delete(d.ref));
-          await batch.commit();
-          log(`✅ Eliminada: ${coleccion} (${snapshot.size} docs)`);
-        } catch (e) {
-          log(`⚠️ ${coleccion}: ${e.message}`);
-        }
-      }
-
-      // PASO 2: Eliminar usuarios excepto admin
-      log("\n️ Eliminando usuarios (excepto admin)...");
-      const usersSnap = await getDocs(collection(db, "users"));
-      const batch2 = writeBatch(db);
-      usersSnap.docs.forEach((d) => {
-        const data = d.data();
-        if (data.role === "admin" && data.email === "admin@simidog.com") {
-          log(`✅ Manteniendo admin: ${data.email}`);
-        } else {
-          batch2.delete(d.ref);
-          log(`🗑️ Eliminando: ${data.email}`);
-        }
-      });
-      await batch2.commit();
-
-      // PASO 3: Crear nuevos usuarios
-      log("\n👥 Creando nuevos usuarios...");
-      for (const u of NUEVOS_USUARIOS) {
-        try {
-          const cred = await createUserWithEmailAndPassword(auth, u.email, u.password);
-          await setDoc(doc(db, "users", cred.user.uid), {
-            email: u.email,
-            role: u.role,
-            branchId: u.branchId,
-            active: true,
-            createdAt: new Date()
-          });
-          log(`✅ Creado: ${u.email} (${u.role})`);
-        } catch (e) {
-          if (e.code === "auth/email-already-in-use") {
-            log(`⚠️ ${u.email} ya existe, buscando...`);
-            const snap = await getDocs(query(collection(db, "users"), where("email", "==", u.email)));
-            if (!snap.empty) {
-              await updateDoc(doc(db, "users", snap.docs[0].id), {
-                role: u.role,
-                branchId: u.branchId,
-                active: true
-              });
-              log(`✅ Actualizado: ${u.email}`);
-            }
-          } else {
-            log(`❌ Error ${u.email}: ${e.message}`);
-          }
-        }
-      }
-
-      // PASO 4: Datos de prueba
-      log("\n📝 Creando datos de prueba...");
-
-      await setDoc(doc(db, "owners", "owner-test-001"), {
-        name: "Cristal Guzman",
-        nameLower: "cristal guzman",
-        phone: "9870123456",
-        address: "C 9 sur x av 15 y 20",
-        createdAt: new Date()
-      });
-      log("✅ Dueño: Cristal Guzman");
-
-      await setDoc(doc(db, "owners", "owner-test-001", "pets", "pet-test-001"), {
+      // Crear mascota en colección separada (no subcolección)
+      log("\n📝 Creando mascota...");
+      await setDoc(doc(db, "pets", "pet-test-001"), {
         name: "Kira",
         nameLower: "kira",
         type: "perro",
@@ -135,6 +50,8 @@ export default function Cleanup() {
       });
       log("✅ Mascota: Kira");
 
+      // Productos
+      log("\n📦 Creando productos...");
       await setDoc(doc(db, "products", "prod-consumo-001"), {
         name: "Alimento Premium Perro 15kg",
         price: 450,
@@ -145,7 +62,7 @@ export default function Cleanup() {
         active: true,
         createdAt: new Date()
       });
-      log("✅ Producto consumo");
+      log("✅ Producto consumo: Alimento Premium");
 
       await setDoc(doc(db, "products", "prod-tienda-001"), {
         name: "Collar Antipulgas",
@@ -157,8 +74,10 @@ export default function Cleanup() {
         active: true,
         createdAt: new Date()
       });
-      log("✅ Producto tienda");
+      log("✅ Producto tienda: Collar Antipulgas");
 
+      // Servicios médicos
+      log("\n🏥 Creando servicios médicos...");
       await setDoc(doc(db, "medical_services", "med-service-001"), {
         name: "Consulta General",
         description: "Consulta veterinaria general",
@@ -169,8 +88,10 @@ export default function Cleanup() {
         active: true,
         createdAt: new Date()
       });
-      log("✅ Servicio médico");
+      log("✅ Servicio médico: Consulta General");
 
+      // Servicios de baño
+      log("\n🛁 Creando servicios de baño...");
       await setDoc(doc(db, "bath_services", "bath-service-001"), {
         name: "Baño Perro Pequeño",
         description: "Baño completo para perro pequeño",
@@ -182,30 +103,59 @@ export default function Cleanup() {
         active: true,
         createdAt: new Date()
       });
-      log("✅ Servicio de baño");
+      log("✅ Servicio de baño: Baño Perro Pequeño");
 
-      log("\n🎉 ¡LISTO! Base de datos limpia y configurada");
+      // Verificar usuarios
+      log("\n👥 Verificando usuarios...");
+      const usersSnap = await getDocs(collection(db, "users"));
+      const usersList = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      log(`Total usuarios en Firestore: ${usersList.length}`);
+      usersList.forEach(u => {
+        log(`  - ${u.email} (${u.role}) - ${u.branchId || 'N/A'}`);
+      });
+
+      // Verificar que mvz1 existe
+      const mvz1Exists = usersList.find(u => u.email === 'mvz1@simidog.com');
+      if (!mvz1Exists) {
+        log("\n⚠️ mvz1@simidog.com no existe en Firestore, creando...");
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, 'mvz1@simidog.com', 'mvz123456');
+          await setDoc(doc(db, "users", cred.user.uid), {
+            email: 'mvz1@simidog.com',
+            role: 'mvz',
+            branchId: 'sucursal-11av',
+            active: true,
+            createdAt: new Date()
+          });
+          log("✅ Creado mvz1@simidog.com");
+        } catch (e) {
+          if (e.code === 'auth/email-already-in-use') {
+            log("⚠️ mvz1@simidog.com ya existe en Auth pero no en Firestore");
+            log("⚠️ Necesitas crearlo manualmente en Firestore");
+          } else {
+            log(`❌ Error: ${e.message}`);
+          }
+        }
+      }
+
+      log("\n🎉 ¡LISTO! Base de datos configurada correctamente");
       setDone(true);
     } catch (e) {
-      log(`❌ ERROR GENERAL: ${e.message}`);
+      log(`❌ ERROR: ${e.message}`);
+      console.error(e);
     } finally {
       setRunning(false);
     }
   };
-
-  useEffect(() => {
-    if (!auth.currentUser) {
-      log("⚠️ No hay usuario logueado. Inicia sesión como admin primero.");
-    }
-  }, []);
 
   return (
     <div className="min-h-screen bg-slate-100 p-6">
       <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">🧹 Limpieza de Base de Datos</h1>
-            <p className="text-sm text-slate-500">Ejecutar solo una vez como admin</p>
+            <h1 className="text-2xl font-bold text-slate-900">🧹 Continuando Limpieza</h1>
+            <p className="text-sm text-slate-500">Crear datos faltantes</p>
           </div>
           <button
             onClick={() => navigate("/admin")}
@@ -219,9 +169,9 @@ export default function Cleanup() {
           <button
             onClick={runCleanup}
             disabled={running || !auth.currentUser}
-            className="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50 mb-4"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 mb-4"
           >
-            {running ? "⏳ Ejecutando..." : "🚀 EJECUTAR LIMPIEZA"}
+            {running ? "⏳ Ejecutando..." : "🚀 CONTINUAR LIMPIEZA"}
           </button>
         )}
 
