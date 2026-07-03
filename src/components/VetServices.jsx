@@ -11,8 +11,8 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 
-const CLOUDINARY_CLOUD_NAME = "TU_CLOUD_NAME"; // ← REEMPLAZAR
-const CLOUDINARY_UPLOAD_PRESET = "TU_UPLOAD_PRESET"; // ← REEMPLAZAR
+const CLOUDINARY_CLOUD_NAME = "j1gd05xx";
+   const CLOUDINARY_UPLOAD_PRESET = "simidog-uploads";
 
 const STATUS_OPTIONS = [
   { id: "pendiente", label: "⏳ Pendiente", color: "bg-yellow-100 text-yellow-800" },
