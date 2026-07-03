@@ -7,6 +7,7 @@ import ReceptionistDashboard from "./pages/ReceptionistDashboard";
 import PublicPanel from "./pages/PublicPanel";
 import ChangePassword from "./pages/ChangePassword";
 import MVZDashboard from "./pages/MVZDashboard";
+import Cleanup from "./pages/Cleanup";
 
 function AppContent() {
   const { currentUser, userData, loading } = useAuth();
@@ -46,6 +47,7 @@ function AppContent() {
         />
         
         {/* Panel Admin */}
+<Route path="/cleanup" element={<Cleanup />} />
         <Route
           path="/admin"
           element={
