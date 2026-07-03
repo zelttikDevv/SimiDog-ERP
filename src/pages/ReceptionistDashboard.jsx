@@ -8,6 +8,7 @@ import ActiveServices from "../components/ActiveServices";
 import Inventory from "../components/Inventory";
 import Consumptions from "../components/Consumptions";
 import POS from "../components/POS";
+import CashRegister from "../components/CashRegister";
 
 export default function ReceptionistDashboard() {
   const [activeTab, setActiveTab] = useState("pos");
@@ -21,6 +22,7 @@ export default function ReceptionistDashboard() {
 
   const menuItems = [
     { id: "pos", label: "Punto de Venta", icon: "💰" },
+    { id: "cash", label: "Caja", icon: "📦" },
     { id: "new", label: "Nuevo Servicio", icon: "➕" },
     { id: "active", label: "Servicios Activos", icon: "📋" },
     { id: "inventory", label: "Inventario", icon: "📦" },
@@ -84,6 +86,7 @@ export default function ReceptionistDashboard() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {activeTab === "pos" && <POS />}
+        {activeTab === "cash" && <CashRegister />}
         {activeTab === "new" && <NewService />}
         {activeTab === "active" && <ActiveServices />}
         {activeTab === "inventory" && <Inventory />}
