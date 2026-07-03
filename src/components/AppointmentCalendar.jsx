@@ -99,6 +99,80 @@ export default function AppointmentCalendar() {
       return;
     }
 
+    const term = searchTerm.toLowerCase().trim();
+
+    try {
+      // Buscar dueños por nombre
+      const ownersQuery = query(
+        collection(db, "owners"),
+        where("nameLower", ">=", term),
+        where("nameLower", "<=", term + "\uf8ff")
+      );
+      const ownersSnapshot = await getDocs(ownersQuery);
+      
+      const results = [];
+      const processedOwners = new Set();
+
+      // Procesar dueños encontrados
+      for (const ownerDoc of ownersSnapshot.docs) {
+        const owner = { id: ownerDoc.id, ...ownerDoc.data() };
+        processedOwners.add(owner.id);
+        
+        const petsQuery = query(
+          collection(db, "pets"),
+          where("ownerId", "==", owner.id)
+        );
+        const petsSnapshot = await getDocs(petsQuery);
+        const pets = petsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        
+        results.push({ owner, pets });
+      }
+
+      // Buscar mascotas por nombre (para encontrar dueños a través de ellas)
+      const petsQuery = query(
+        collection(db, "pets"),
+        where("nameLower", ">=", term),
+        where("nameLower", "<=", term + "\uf8ff")
+      );
+      const petsSnapshot = await getDocs(petsQuery);
+
+      for (const petDoc of petsSnapshot.docs) {
+        const pet = { id: petDoc.id, ...petDoc.data() };
+        
+        // Si el dueño ya fue procesado, agregar la mascota a su lista
+        if (processedOwners.has(pet.ownerId)) {
+          const existing = results.find((r) => r.owner.id === pet.ownerId);
+          if (existing && !existing.pets.find((p) => p.id === pet.id)) {
+            existing.pets.push(pet);
+          }
+        } else {
+          // Dueño nuevo, buscarlo
+          const ownerRef = doc(db, "owners", pet.ownerId);
+          const ownerSnap = await getDocs(query(collection(db, "owners"), where("__name__", "==", pet.ownerId)));
+          
+          if (!ownerSnap.empty) {
+            const owner = { id: ownerSnap.docs[0].id, ...ownerSnap.docs[0].data() };
+            processedOwners.add(owner.id);
+            
+            // Buscar todas las mascotas de este dueño
+            const allPetsQuery = query(
+              collection(db, "pets"),
+              where("ownerId", "==", owner.id)
+            );
+            const allPetsSnapshot = await getDocs(allPetsQuery);
+            const allPets = allPetsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+            
+            results.push({ owner, pets: allPets });
+          }
+        }
+      }
+
+      setSearchResults(results);
+    } catch (error) {
+      console.error("Error buscando:", error);
+    }
+  };
+
     try {
       const ownersQuery = query(
         collection(db, "owners"),
