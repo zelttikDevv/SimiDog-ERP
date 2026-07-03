@@ -856,4 +856,9 @@ export default function POS() {
             className="w-full bg-green-600 text-white py-3 rounded-lg font-bold mt-4 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
             {processing ? "⏳ Procesando..." : currentRegister ? `✅ Cobrar $${total.toFixed(2)}` : "🔒 Caja cerrada"}
-  
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
