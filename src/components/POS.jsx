@@ -20,35 +20,13 @@ const PAYMENT_METHODS = [
   { id: "transferencia", label: "📱 Transferencia" }
 ];
 
-const BATH_SERVICES = [
-  { id: "bano_perro_pequeno", name: "Baño Perro Pequeño (<10kg)", defaultPrice: 150 },
-  { id: "bano_perro_mediano", name: "Baño Perro Mediano (10-25kg)", defaultPrice: 200 },
-  { id: "bano_perro_grande", name: "Baño Perro Grande (25-40kg)", defaultPrice: 250 },
-  { id: "bano_perro_gigante", name: "Baño Perro Gigante (>40kg)", defaultPrice: 300 },
-  { id: "corte_perro_pequeno", name: "Corte Perro Pequeño", defaultPrice: 250 },
-  { id: "corte_perro_mediano", name: "Corte Perro Mediano", defaultPrice: 300 },
-  { id: "corte_perro_grande", name: "Corte Perro Grande", defaultPrice: 350 },
-  { id: "bano_y_corte_pequeno", name: "Baño + Corte Pequeño", defaultPrice: 350 },
-  { id: "bano_y_corte_mediano", name: "Baño + Corte Mediano", defaultPrice: 450 },
-  { id: "bano_y_corte_grande", name: "Baño + Corte Grande", defaultPrice: 550 },
-  { id: "bano_gato", name: "Baño Gato", defaultPrice: 180 },
-  { id: "otro_bano_corte", name: "Otro Servicio", defaultPrice: 0 }
-];
-
-const MVZ_SERVICES = [
-  { id: "consulta_general", name: "Consulta General", defaultPrice: 250 },
-  { id: "vacuna_puppy", name: "Vacuna Puppy", defaultPrice: 180 },
-  { id: "vacuna_triple", name: "Vacuna Triple", defaultPrice: 220 },
-  { id: "desparasitacion", name: "Desparasitación", defaultPrice: 150 },
-  { id: "curacion", name: "Curación", defaultPrice: 200 },
-  { id: "otro_servicio", name: "Otro Servicio MVZ", defaultPrice: 0 }
-];
-
 export default function POS() {
   const { userData, currentUser } = useAuth();
   const branchId = userData?.branchId || "sucursal-11av";
 
   const [products, setProducts] = useState([]);
+  const [medicalServices, setMedicalServices] = useState([]);
+  const [bathServices, setBathServices] = useState([]);
   const [currentRegister, setCurrentRegister] = useState(null);
   const [pendingAppointments, setPendingAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +55,32 @@ export default function POS() {
         .sort((a, b) => a.name.localeCompare(b.name));
       setProducts(data);
       setLoading(false);
+    });
+    return unsubscribe;
+  }, [branchId]);
+
+  // Cargar servicios médicos del catálogo
+  useEffect(() => {
+    const q = query(collection(db, "medical_services"), where("branchId", "==", branchId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((s) => s.active !== false)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setMedicalServices(data);
+    });
+    return unsubscribe;
+  }, [branchId]);
+
+  // Cargar servicios de baño del catálogo
+  useEffect(() => {
+    const q = query(collection(db, "bath_services"), where("branchId", "==", branchId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((s) => s.active !== false)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setBathServices(data);
     });
     return unsubscribe;
   }, [branchId]);
@@ -120,6 +124,14 @@ export default function POS() {
 
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredMedicalServices = medicalServices.filter((s) =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredBathServices = bathServices.filter((s) =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
@@ -244,7 +256,7 @@ export default function POS() {
       }
       const coupon = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
       if (coupon.used) {
-        setCouponError("❌ Este cupón ya fue usado");
+        setCouponError(" Este cupón ya fue usado");
         return;
       }
       if (coupon.expiresAt) {
@@ -281,9 +293,7 @@ export default function POS() {
   const handleRemovePayment = (index) => {
     if (payments.length === 1) return;
     setPayments(payments.filter((_, i) => i !== index));
-  };
-
-  const handleProcessSale = async () => {
+  };const handleProcessSale = async () => {
     if (!currentRegister) {
       setMessage("❌ Debes abrir la caja antes de cobrar. Ve a la pestaña 'Caja' para abrirla.");
       setTimeout(() => setMessage(""), 5000);
@@ -301,7 +311,6 @@ export default function POS() {
     setProcessing(true);
     setMessage("");
     try {
-      // Obtener datos del cliente del primer item con info
       const itemWithOwner = items.find((i) => i.ownerId);
       
       const transactionData = {
@@ -340,7 +349,7 @@ export default function POS() {
       const txRef = await addDoc(collection(db, "transactions"), transactionData);
       const transaction = { id: txRef.id, ...transactionData, timestamp: new Date() };
 
-      // Crear registros de servicios MVZ si hay (para servicios sueltos, no de citas)
+      // Crear registros de servicios MVZ sueltos (no de citas)
       for (const item of items) {
         if (item.type === "mvz" && !item.appointmentId) {
           await addDoc(collection(db, "vet_services"), {
@@ -373,6 +382,42 @@ export default function POS() {
         });
       }
 
+      // Actualizar historia clínica de la mascota
+      if (itemWithOwner?.petId) {
+        const petRef = doc(db, "pets", itemWithOwner.petId);
+        const petSnap = await getDocs(query(collection(db, "pets"), where("__name__", "==", itemWithOwner.petId)));
+        
+        if (!petSnap.empty) {
+          const petData = petSnap.docs[0].data();
+          const clinicalHistory = petData.clinicalHistory || [];
+          
+          // Agregar nueva entrada al historial
+          const newHistoryEntry = {
+            date: serverTimestamp(),
+            transactionId: txRef.id,
+            mvzName: itemWithOwner.ownerName || "N/A",
+            procedures: items
+              .filter((i) => i.type === "mvz")
+              .map((i) => ({ name: i.name, cost: i.total })),
+            services: items
+              .filter((i) => i.type === "bath")
+              .map((i) => ({ name: i.name, cost: i.total })),
+            products: items
+              .filter((i) => i.type === "product")
+              .map((i) => ({ name: i.name, quantity: i.quantity, total: i.total })),
+            totalCost: total,
+            notes: items.find((i) => i.notes)?.notes || ""
+          };
+          
+          clinicalHistory.push(newHistoryEntry);
+          
+          await updateDoc(petRef, {
+            clinicalHistory,
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+
       if (appliedCoupon) {
         await updateDoc(doc(db, "coupons", appliedCoupon.id), {
           used: true,
@@ -380,6 +425,7 @@ export default function POS() {
           transactionId: txRef.id
         });
       }
+      
       for (const item of items) {
         if (item.type === "product") {
           const productRef = doc(db, "products", item.productId);
@@ -389,6 +435,7 @@ export default function POS() {
           });
         }
       }
+      
       setMessage("✅ Venta procesada correctamente");
       setTimeout(() => {
         generateTicketPDF(transaction);
@@ -482,7 +529,7 @@ export default function POS() {
                 activeTab === "bath" ? "bg-purple-600 text-white" : "text-gray-600 hover:bg-gray-100"
               }`}
             >
-               Baño/Corte
+              🛁 Baño/Corte
             </button>
             <button
               onClick={() => setActiveTab("mvz")}
@@ -531,43 +578,50 @@ export default function POS() {
 
           {activeTab === "bath" && (
             <div className="bg-white rounded-lg shadow p-4">
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="🔍 Buscar servicio de baño..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm focus:border-purple-500 focus:outline-none"
+                />
+              </div>
               {!showServiceForm ? (
                 <>
-                  <h3 className="font-semibold mb-3">Servicios de Baño y Corte</h3>
-                  <div className="grid grid-cols-1 gap-3">
-                    {BATH_SERVICES.map((service) => (
-                      <button
-                        key={service.id}
-                        onClick={() => handleOpenServiceForm(service, "bath")}
-                        className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-purple-500 hover:bg-purple-50 transition-all"
-                      >
-                        <div className="font-medium text-sm">{service.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">Precio: ${service.defaultPrice}</div>
-                      </button>
-                    ))}
-                  </div>
+                  {filteredBathServices.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      No hay servicios de baño disponibles. El admin debe crearlos.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3">
+                      {filteredBathServices.map((service) => (
+                        <button
+                          key={service.id}
+                          onClick={() => handleOpenServiceForm(service, "bath")}
+                          className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-purple-500 hover:bg-purple-50 transition-all"
+                        >
+                          <div className="font-medium text-sm">{service.name}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {service.serviceType} · {service.size} · ⏱️ {service.duration} min
+                          </div>
+                          <div className="font-bold text-purple-600 mt-1">${service.defaultPrice}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="space-y-3">
-                  <h3 className="font-semibold">Agregar Servicio de Baño/Corte</h3>
+                  <h3 className="font-semibold">Editar Servicio de Baño/Corte</h3>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
-                    <select
-                      value={selectedService?.id}
-                      onChange={(e) => {
-                        const service = BATH_SERVICES.find((s) => s.id === e.target.value);
-                        setSelectedService(service);
-                        setServicePrice(service?.defaultPrice || "");
-                      }}
-                      className="w-full border rounded-md px-3 py-2 text-sm"
-                    >
-                      {BATH_SERVICES.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
+                    <div className="bg-gray-100 rounded-md px-3 py-2 text-sm">
+                      {selectedService?.name}
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio ($)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio ($) *</label>
                     <input
                       type="number"
                       step="0.01"
@@ -612,43 +666,50 @@ export default function POS() {
 
           {activeTab === "mvz" && (
             <div className="bg-white rounded-lg shadow p-4">
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder=" Buscar servicio médico..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm focus:border-green-500 focus:outline-none"
+                />
+              </div>
               {!showServiceForm ? (
                 <>
-                  <h3 className="font-semibold mb-3">Servicios Veterinarios</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {MVZ_SERVICES.map((service) => (
-                      <button
-                        key={service.id}
-                        onClick={() => handleOpenServiceForm(service, "mvz")}
-                        className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-green-500 hover:bg-green-50 transition-all"
-                      >
-                        <div className="font-medium text-sm">{service.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">Precio: ${service.defaultPrice}</div>
-                      </button>
-                    ))}
-                  </div>
+                  {filteredMedicalServices.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      No hay servicios médicos disponibles. El admin debe crearlos.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {filteredMedicalServices.map((service) => (
+                        <button
+                          key={service.id}
+                          onClick={() => handleOpenServiceForm(service, "mvz")}
+                          className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-green-500 hover:bg-green-50 transition-all"
+                        >
+                          <div className="font-medium text-sm">{service.name}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {service.category} · ️ {service.duration} min
+                          </div>
+                          <div className="font-bold text-green-600 mt-1">${service.defaultPrice}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="space-y-3">
-                  <h3 className="font-semibold">Agregar Servicio MVZ</h3>
+                  <h3 className="font-semibold">Editar Servicio MVZ</h3>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
-                    <select
-                      value={selectedService?.id}
-                      onChange={(e) => {
-                        const service = MVZ_SERVICES.find((s) => s.id === e.target.value);
-                        setSelectedService(service);
-                        setServicePrice(service?.defaultPrice || "");
-                      }}
-                      className="w-full border rounded-md px-3 py-2 text-sm"
-                    >
-                      {MVZ_SERVICES.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
+                    <div className="bg-gray-100 rounded-md px-3 py-2 text-sm">
+                      {selectedService?.name}
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio ($)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Precio ($) *</label>
                     <input
                       type="number"
                       step="0.01"
@@ -712,7 +773,7 @@ export default function POS() {
                     <div className="flex-1">
                       <div className="text-sm font-semibold">{item.name}</div>
                       <div className="text-xs text-gray-500">
-                        {item.type === "product" ? "🛍️ Producto" : item.type === "bath" ? " Baño/Corte" : "🏥 Servicio MVZ"}
+                        {item.type === "product" ? "🛍️ Producto" : item.type === "bath" ? "🛁 Baño/Corte" : "🏥 Servicio MVZ"}
                         {item.notes && <div className="italic mt-1">{item.notes}</div>}
                       </div>
                     </div>
