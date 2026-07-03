@@ -7,14 +7,13 @@ import {
   where,
   onSnapshot,
   addDoc,
-  updateDoc,
   doc,
   getDocs,
   serverTimestamp
 } from "firebase/firestore";
 
 const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8am a 8pm
+const HOURS = Array.from({ length: 13 }, (_, i) => i + 8);
 
 const STATUS_COLORS = {
   programada: "bg-blue-100 text-blue-800 border-blue-300",
@@ -27,15 +26,13 @@ const STATUS_COLORS = {
 export default function AppointmentCalendar() {
   const { userData, currentUser } = useAuth();
   const branchId = userData?.branchId || "sucursal-11av";
-  const userRole = userData?.role;
 
   const [weekStart, setWeekStart] = useState(getWeekStart(new Date()));
   const [appointments, setAppointments] = useState([]);
+  const [mvzList, setMvzList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState(null);
 
-  // Formulario
   const [petId, setPetId] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [ownerName, setOwnerName] = useState("");
@@ -46,6 +43,7 @@ export default function AppointmentCalendar() {
   const [duration, setDuration] = useState("30");
   const [reason, setReason] = useState("");
   const [isUrgent, setIsUrgent] = useState(false);
+  const [selectedMvzId, setSelectedMvzId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -74,7 +72,27 @@ export default function AppointmentCalendar() {
     return unsubscribe;
   }, [branchId, weekStart]);
 
-  // Buscar mascota/dueño
+  // Cargar MVZ de la sucursal
+  useEffect(() => {
+    const q = query(
+      collection(db, "users"),
+      where("role", "==", "mvz"),
+      where("branchId", "==", branchId),
+      where("active", "==", true)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setMvzList(data);
+      // Si hay solo 1 MVZ, preseleccionarlo
+      if (data.length === 1) {
+        setSelectedMvzId(data[0].id);
+      }
+    });
+
+    return unsubscribe;
+  }, [branchId]);
+
   const handleSearch = async () => {
     if (!searchTerm.trim()) {
       setSearchResults([]);
@@ -122,7 +140,6 @@ export default function AppointmentCalendar() {
     const dateStr = date.toISOString().split("T")[0];
     const timeStr = `${hour.toString().padStart(2, "0")}:00`;
     
-    setSelectedSlot({ day, hour, dateStr, timeStr });
     setAppointmentDate(dateStr);
     setAppointmentTime(timeStr);
     setShowForm(true);
@@ -133,10 +150,15 @@ export default function AppointmentCalendar() {
       alert("Completa mascota, fecha y hora");
       return;
     }
+    if (!selectedMvzId) {
+      alert("Selecciona un MVZ");
+      return;
+    }
 
     setSaving(true);
 
     try {
+      const mvz = mvzList.find((m) => m.id === selectedMvzId);
       const scheduledDate = new Date(`${appointmentDate}T${appointmentTime}`);
 
       await addDoc(collection(db, "appointments"), {
@@ -152,8 +174,8 @@ export default function AppointmentCalendar() {
         isUrgent,
         isWalkIn: false,
         status: "programada",
-        mvzId: null,
-        mvzName: null,
+        mvzId: selectedMvzId,
+        mvzName: mvz?.email || mvz?.fullName || "MVZ",
         procedures: [],
         clinicalNotes: "",
         diagnosis: "",
@@ -217,8 +239,7 @@ export default function AppointmentCalendar() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-2">
         <div>
           <h2 className="text-xl font-bold text-gray-800">Agenda de Citas</h2>
           <p className="text-sm text-gray-500">Semana del {weekStart.toLocaleDateString("es-ES")}</p>
@@ -245,10 +266,16 @@ export default function AppointmentCalendar() {
         </div>
       </div>
 
-      {/* Calendario */}
+      {mvzList.length === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-sm text-yellow-800">
+            ⚠️ No hay MVZ registrados en esta sucursal. El admin debe crear un usuario con rol MVZ asignado a esta sucursal.
+          </p>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow overflow-x-auto">
         <div className="min-w-[800px]">
-          {/* Header días */}
           <div className="grid grid-cols-8 border-b">
             <div className="p-3 bg-gray-50 font-semibold text-sm">Hora</div>
             {DAYS.map((day, i) => {
@@ -265,7 +292,6 @@ export default function AppointmentCalendar() {
             })}
           </div>
 
-          {/* Slots de hora */}
           {HOURS.map((hour) => (
             <div key={hour} className="grid grid-cols-8 border-b">
               <div className="p-3 bg-gray-50 text-sm font-medium">
@@ -287,8 +313,11 @@ export default function AppointmentCalendar() {
                       >
                         <div className="font-semibold truncate">{apt.petName}</div>
                         <div className="truncate text-[10px]">{apt.ownerName}</div>
+                        {apt.mvzName && (
+                          <div className="truncate text-[10px] text-gray-600">‍⚕️ {apt.mvzName}</div>
+                        )}
                         {apt.isUrgent && (
-                          <div className="text-[10px] font-bold text-red-600"> URGENTE</div>
+                          <div className="text-[10px] font-bold text-red-600">🚨 URGENTE</div>
                         )}
                       </div>
                     ))}
@@ -300,7 +329,6 @@ export default function AppointmentCalendar() {
         </div>
       </div>
 
-      {/* Modal crear cita */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
@@ -322,7 +350,6 @@ export default function AppointmentCalendar() {
               <div><strong>Hora:</strong> {appointmentTime}</div>
             </div>
 
-            {/* Buscar mascota */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Buscar mascota/dueño *</label>
               <div className="flex gap-2">
@@ -369,6 +396,28 @@ export default function AppointmentCalendar() {
                 <div><strong>Dueño:</strong> {ownerName}</div>
               </div>
             )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">MVZ asignado *</label>
+              {mvzList.length === 1 ? (
+                <div className="bg-gray-100 rounded-md px-3 py-2 text-sm">
+                  👨‍⚕️ {mvzList[0].email || mvzList[0].fullName} (único MVZ de la sucursal)
+                </div>
+              ) : (
+                <select
+                  value={selectedMvzId}
+                  onChange={(e) => setSelectedMvzId(e.target.value)}
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                >
+                  <option value="">Selecciona un MVZ...</option>
+                  {mvzList.map((mvz) => (
+                    <option key={mvz.id} value={mvz.id}>
+                      ‍⚕️ {mvz.email || mvz.fullName}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
