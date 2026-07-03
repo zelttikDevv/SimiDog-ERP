@@ -50,6 +50,7 @@ export default function POS() {
 
   const [products, setProducts] = useState([]);
   const [currentRegister, setCurrentRegister] = useState(null);
+  const [pendingAppointments, setPendingAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("products");
@@ -66,6 +67,7 @@ export default function POS() {
   const [processing, setProcessing] = useState(false);
   const [message, setMessage] = useState("");
 
+  // Cargar productos
   useEffect(() => {
     const q = query(collection(db, "products"), where("branchId", "==", branchId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -79,6 +81,7 @@ export default function POS() {
     return unsubscribe;
   }, [branchId]);
 
+  // Cargar caja abierta
   useEffect(() => {
     const q = query(
       collection(db, "cash_registers"),
@@ -91,6 +94,26 @@ export default function POS() {
       } else {
         setCurrentRegister(null);
       }
+    });
+    return unsubscribe;
+  }, [branchId]);
+
+  // Cargar citas atendidas pendientes de cobro
+  useEffect(() => {
+    const q = query(
+      collection(db, "appointments"),
+      where("branchId", "==", branchId),
+      where("status", "==", "atendida")
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => {
+          const aTime = a.attendedAt?.toMillis?.() || 0;
+          const bTime = b.attendedAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+      setPendingAppointments(data);
     });
     return unsubscribe;
   }, [branchId]);
@@ -163,6 +186,29 @@ export default function POS() {
     setServicePrice("");
     setServiceNotes("");
     setShowServiceForm(false);
+  };
+
+  const handleAddAppointment = (appointment) => {
+    const newItems = appointment.procedures.map((proc) => ({
+      type: "mvz",
+      id: `apt_${appointment.id}_${proc.id}`,
+      appointmentId: appointment.id,
+      petId: appointment.petId,
+      petName: appointment.petName,
+      ownerId: appointment.ownerId,
+      ownerName: appointment.ownerName,
+      ownerPhone: appointment.ownerPhone,
+      serviceId: proc.id,
+      name: proc.name,
+      notes: "",
+      quantity: 1,
+      unitPrice: proc.cost,
+      total: proc.cost
+    }));
+
+    setItems([...items, ...newItems]);
+    setMessage(`✅ Cita de ${appointment.petName} agregada (${newItems.length} procedimientos)`);
+    setTimeout(() => setMessage(""), 3000);
   };
 
   const handleUpdateQuantity = (index, quantity) => {
@@ -255,11 +301,19 @@ export default function POS() {
     setProcessing(true);
     setMessage("");
     try {
+      // Obtener datos del cliente del primer item con info
+      const itemWithOwner = items.find((i) => i.ownerId);
+      
       const transactionData = {
         branchId,
         userId: currentUser?.uid,
         userName: userData?.email || "Desconocido",
         cashRegisterId: currentRegister.id,
+        petId: itemWithOwner?.petId || null,
+        petName: itemWithOwner?.petName || null,
+        ownerId: itemWithOwner?.ownerId || null,
+        ownerName: itemWithOwner?.ownerName || null,
+        ownerPhone: itemWithOwner?.ownerPhone || null,
         items: items.map((i) => ({
           type: i.type,
           id: i.id,
@@ -286,15 +340,15 @@ export default function POS() {
       const txRef = await addDoc(collection(db, "transactions"), transactionData);
       const transaction = { id: txRef.id, ...transactionData, timestamp: new Date() };
 
-      // Crear registros de servicios MVZ si hay
+      // Crear registros de servicios MVZ si hay (para servicios sueltos, no de citas)
       for (const item of items) {
-        if (item.type === "mvz") {
+        if (item.type === "mvz" && !item.appointmentId) {
           await addDoc(collection(db, "vet_services"), {
             branchId,
-            petId: null,
-            petName: item.name,
-            ownerName: null,
-            ownerPhone: null,
+            petId: item.petId || null,
+            petName: item.petName || item.name,
+            ownerName: item.ownerName || null,
+            ownerPhone: item.ownerPhone || null,
             serviceName: item.name,
             serviceId: item.serviceId,
             cost: item.total,
@@ -306,6 +360,17 @@ export default function POS() {
             timestamp: serverTimestamp()
           });
         }
+      }
+
+      // Marcar citas como cobradas
+      const appointmentIds = [...new Set(items.filter((i) => i.appointmentId).map((i) => i.appointmentId))];
+      for (const aptId of appointmentIds) {
+        await updateDoc(doc(db, "appointments", aptId), {
+          status: "cobrada",
+          transactionId: txRef.id,
+          totalCost: total,
+          paidAt: serverTimestamp()
+        });
       }
 
       if (appliedCoupon) {
@@ -349,7 +414,7 @@ export default function POS() {
       {!currentRegister && (
         <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">️</span>
+            <span className="text-2xl">⚠️</span>
             <div>
               <p className="font-semibold text-yellow-800">Caja cerrada</p>
               <p className="text-sm text-yellow-700">
@@ -363,6 +428,40 @@ export default function POS() {
       {message && (
         <div className={`p-3 rounded-md text-sm ${message.startsWith("✅") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {message}
+        </div>
+      )}
+
+      {/* Citas atendidas pendientes de cobro */}
+      {pendingAppointments.length > 0 && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <h3 className="font-semibold mb-3">🩺 Citas Atendidas - Pendientes de Cobro</h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {pendingAppointments.map((apt) => {
+              const totalApt = apt.procedures?.reduce((sum, p) => sum + p.cost, 0) || 0;
+              return (
+                <div key={apt.id} className="border rounded-lg p-3 flex justify-between items-center">
+                  <div className="flex-1">
+                    <div className="font-medium">🐾 {apt.petName}</div>
+                    <div className="text-xs text-gray-500">
+                      👤 {apt.ownerName} · 📞 {apt.ownerPhone}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {apt.procedures?.map((p) => p.name).join(", ")}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-indigo-600">${totalApt.toFixed(2)}</div>
+                    <button
+                      onClick={() => handleAddAppointment(apt)}
+                      className="text-xs bg-green-600 text-white px-3 py-1 rounded mt-1 hover:bg-green-700"
+                    >
+                      + Agregar al ticket
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -383,7 +482,7 @@ export default function POS() {
                 activeTab === "bath" ? "bg-purple-600 text-white" : "text-gray-600 hover:bg-gray-100"
               }`}
             >
-              🛁 Baño/Corte
+               Baño/Corte
             </button>
             <button
               onClick={() => setActiveTab("mvz")}
@@ -613,7 +712,7 @@ export default function POS() {
                     <div className="flex-1">
                       <div className="text-sm font-semibold">{item.name}</div>
                       <div className="text-xs text-gray-500">
-                        {item.type === "product" ? "🛍️ Producto" : item.type === "bath" ? "🛁 Baño/Corte" : "🏥 Servicio MVZ"}
+                        {item.type === "product" ? "🛍️ Producto" : item.type === "bath" ? " Baño/Corte" : "🏥 Servicio MVZ"}
                         {item.notes && <div className="italic mt-1">{item.notes}</div>}
                       </div>
                     </div>
@@ -773,10 +872,10 @@ export default function POS() {
             disabled={!isPaymentComplete || items.length === 0 || processing || !currentRegister}
             className="w-full bg-green-600 text-white py-3 rounded-lg font-bold mt-4 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
-            {processing ? " Procesando..." : currentRegister ? `✅ Cobrar $${total.toFixed(2)}` : " Caja cerrada"}
+            {processing ? "⏳ Procesando..." : currentRegister ? `✅ Cobrar $${total.toFixed(2)}` : "🔒 Caja cerrada"}
           </button>
         </div>
       </div>
     </div>
   );
-                }
+}
