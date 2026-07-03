@@ -10,8 +10,7 @@ import {
   updateDoc,
   doc,
   getDocs,
-  serverTimestamp,
-  orderBy
+  serverTimestamp
 } from "firebase/firestore";
 
 export default function CashRegister() {
@@ -22,12 +21,10 @@ export default function CashRegister() {
   const [registers, setRegisters] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Formulario apertura
   const [showOpenForm, setShowOpenForm] = useState(false);
   const [initialAmount, setInitialAmount] = useState("");
   const [opening, setOpening] = useState(false);
 
-  // Formulario cierre
   const [showCloseForm, setShowCloseForm] = useState(false);
   const [actualCash, setActualCash] = useState("");
   const [actualCard, setActualCard] = useState("");
@@ -35,7 +32,6 @@ export default function CashRegister() {
   const [closeNotes, setCloseNotes] = useState("");
   const [closing, setClosing] = useState(false);
 
-  // Cargar caja actual y historial
   useEffect(() => {
     // Caja actual abierta
     const qCurrent = query(
@@ -50,19 +46,29 @@ export default function CashRegister() {
       } else {
         setCurrentRegister(null);
       }
+    }, (error) => {
+      console.error("Error en caja actual:", error);
     });
 
-    // Historial de cajas cerradas
+    // Historial de cajas cerradas (SIN orderBy, ordenamos en cliente)
     const qHistory = query(
       collection(db, "cash_registers"),
       where("branchId", "==", branchId),
-      where("status", "==", "cerrada"),
-      orderBy("closedAt", "desc")
+      where("status", "==", "cerrada")
     );
 
     const unsubscribeHistory = onSnapshot(qHistory, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => {
+          const aTime = a.closedAt?.toMillis?.() || 0;
+          const bTime = b.closedAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
       setRegisters(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error en historial:", error);
       setLoading(false);
     });
 
@@ -72,7 +78,6 @@ export default function CashRegister() {
     };
   }, [branchId]);
 
-  // Calcular totales esperados de la caja actual
   const calculateExpectedTotals = async (registerId) => {
     const transactionsQuery = query(
       collection(db, "transactions"),
@@ -95,7 +100,6 @@ export default function CashRegister() {
     return { cash, card, transfer };
   };
 
-  // Abrir caja
   const handleOpenRegister = async () => {
     if (!initialAmount || parseFloat(initialAmount) < 0) {
       alert("Ingresa un monto inicial válido");
@@ -134,7 +138,6 @@ export default function CashRegister() {
     }
   };
 
-  // Cerrar caja
   const handleCloseRegister = async () => {
     if (!currentRegister) return;
 
@@ -175,7 +178,7 @@ export default function CashRegister() {
   };
 
   if (loading) {
-    return <div className="text-center py-8 text-gray-500">Cargando...</div>;
+    return <div className="text-center py-8 text-gray-500">Cargando caja...</div>;
   }
 
   return (
@@ -371,19 +374,19 @@ export default function CashRegister() {
                     <div className="bg-gray-50 p-2 rounded">
                       <div className="text-gray-500">Efectivo</div>
                       <div className="font-semibold">
-                        Esp: ${reg.expectedCash.toFixed(2)} / Real: ${reg.actualCash.toFixed(2)}
+                        Esp: ${(reg.expectedCash || 0).toFixed(2)} / Real: ${(reg.actualCash || 0).toFixed(2)}
                       </div>
                     </div>
                     <div className="bg-gray-50 p-2 rounded">
                       <div className="text-gray-500">Tarjeta</div>
                       <div className="font-semibold">
-                        Esp: ${reg.expectedCard.toFixed(2)} / Real: ${reg.actualCard.toFixed(2)}
+                        Esp: ${(reg.expectedCard || 0).toFixed(2)} / Real: ${(reg.actualCard || 0).toFixed(2)}
                       </div>
                     </div>
                     <div className="bg-gray-50 p-2 rounded">
                       <div className="text-gray-500">Transferencia</div>
                       <div className="font-semibold">
-                        Esp: ${reg.expectedTransfer.toFixed(2)} / Real: ${reg.actualTransfer.toFixed(2)}
+                        Esp: ${(reg.expectedTransfer || 0).toFixed(2)} / Real: ${(reg.actualTransfer || 0).toFixed(2)}
                       </div>
                     </div>
                   </div>
@@ -401,4 +404,4 @@ export default function CashRegister() {
       </div>
     </div>
   );
-}
+  }
