@@ -63,6 +63,7 @@ export default function AdminUsers() {
     
     return unsubscribe;
   }, [branchId, userData?.role]);
+
   const handleCreate = () => {
     setEditingUser(null);
     setFormData({ email: "", role: "recepcionista", branchId: "", newPassword: "" });
@@ -87,8 +88,10 @@ export default function AdminUsers() {
       setMessage("❌ Ingresa un email");
       return;
     }
-    if (!formData.branchId && formData.role === "mvz") {
-      setMessage("❌ Selecciona una sucursal para el MVZ");
+
+    // Validar que recepcionistas y MVZ tengan sucursal
+    if ((formData.role === "mvz" || formData.role === "recepcionista") && !formData.branchId) {
+      setMessage("❌ Selecciona una sucursal");
       return;
     }
 
@@ -99,7 +102,7 @@ export default function AdminUsers() {
       const userData = {
         email: formData.email.trim(),
         role: formData.role,
-        branchId: formData.branchId,
+        branchId: formData.branchId || null,
         updatedAt: serverTimestamp()
       };
 
@@ -133,11 +136,12 @@ export default function AdminUsers() {
       });
     } catch (error) {
       console.error("Error:", error);
+      alert("Error al actualizar usuario");
     }
   };
 
   if (loading) {
-    return <div className="text-center py-8 text-gray-500">Cargando...</div>;
+    return <div className="text-center py-8 text-gray-500">Cargando usuarios...</div>;
   }
 
   return (
@@ -173,21 +177,24 @@ export default function AdminUsers() {
               return (
                 <div key={user.id} className="p-4 flex items-center justify-between">
                   <div className="flex-1">
-                    <div className="font-medium">{user.email}</div>
-                    <div className="text-sm text-gray-500 mt-0.5">
-                      {role?.label} {branch && `· ${branch.label}`}
+                    <div className="font-medium text-slate-900">{user.email}</div>
+                    <div className="text-sm text-slate-500 mt-0.5">
+                      {role?.label}
+                      {branch && <span className="mx-1">·</span>}
+                      {branch && <span>{branch.label}</span>}
+                      {user.role === "admin" && <span className="text-xs text-gray-400 ml-1">(Todos)</span>}
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleEdit(user)}
-                      className="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded hover:bg-indigo-200"
+                      className="text-xs bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded hover:bg-indigo-200 font-medium"
                     >
                       ✏️ Editar
                     </button>
                     <button
                       onClick={() => handleToggleActive(user.id, user.active !== false)}
-                      className={`text-xs px-3 py-1.5 rounded ${
+                      className={`text-xs px-3 py-1.5 rounded font-medium ${
                         user.active !== false
                           ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
                           : "bg-green-100 text-green-700 hover:bg-green-200"
@@ -206,27 +213,27 @@ export default function AdminUsers() {
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 space-y-4">
-            <h3 className="text-lg font-bold">
+            <h3 className="text-lg font-bold text-slate-900">
               {editingUser ? "Editar Usuario" : "Nuevo Usuario"}
             </h3>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full border rounded-md px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 placeholder="usuario@simidog.com"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Rol</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Rol</label>
               <select
                 value={formData.role}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value, branchId: "" })}
-                className="w-full border rounded-md px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {ROLES.map((r) => (
                   <option key={r.id} value={r.id}>{r.label}</option>
@@ -234,15 +241,15 @@ export default function AdminUsers() {
               </select>
             </div>
 
-            {formData.role === "mvz" && (
+            {(formData.role === "mvz" || formData.role === "recepcionista") && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Sucursal de trabajo *
                 </label>
                 <select
                   value={formData.branchId}
                   onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   required
                 >
                   <option value="">Selecciona una sucursal...</option>
@@ -255,33 +262,36 @@ export default function AdminUsers() {
 
             {!editingUser && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Contraseña inicial (opcional)
                 </label>
                 <input
                   type="password"
                   value={formData.newPassword}
                   onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Dejar vacío para generar automática"
                 />
+                <p className="text-xs text-slate-500 mt-1">
+                  Si se deja vacío, se generará una contraseña temporal
+                </p>
               </div>
             )}
 
             {editingUser && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Nueva contraseña (opcional)
                 </label>
                 <input
                   type="password"
                   value={formData.newPassword}
                   onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Dejar vacío para no cambiar"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Si se ingresa, el usuario deberá cambiarla en su próximo login.
+                <p className="text-xs text-slate-500 mt-1">
+                  Si se ingresa, el usuario deberá cambiarla en su próximo login
                 </p>
               </div>
             )}
@@ -290,13 +300,13 @@ export default function AdminUsers() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 bg-indigo-600 text-white py-2 rounded-md text-sm hover:bg-indigo-700 disabled:opacity-50"
+                className="flex-1 bg-indigo-600 text-white py-2 rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
               >
                 {saving ? "Guardando..." : "💾 Guardar cambios"}
               </button>
               <button
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 border rounded-md text-sm"
+                className="px-4 py-2 border border-slate-300 rounded-md text-sm font-medium hover:bg-slate-50"
               >
                 Cancelar
               </button>
