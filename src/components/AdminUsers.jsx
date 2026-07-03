@@ -22,7 +22,8 @@ const BRANCHES = {
 
 const ROLES = [
   { id: "admin", label: "Administrador" },
-  { id: "recepcionista", label: "Recepcionista" }
+  { id: "recepcionista", label: "Recepcionista" },
+  { id: "mvz", label: "Médico Veterinario (MVZ)" }  // ← AGREGAR
 ];
 
 function generatePassword(length = 10) {
