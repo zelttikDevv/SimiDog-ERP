@@ -9,6 +9,7 @@ import Inventory from "../components/Inventory";
 import Consumptions from "../components/Consumptions";
 import POS from "../components/POS";
 import CashRegister from "../components/CashRegister";
+import AppointmentCalendar from "../components/AppointmentCalendar";
 
 export default function ReceptionistDashboard() {
   const [activeTab, setActiveTab] = useState("pos");
@@ -21,7 +22,8 @@ export default function ReceptionistDashboard() {
   };
 
   const menuItems = [
-    { id: "pos", label: "Punto de Venta", icon: "💰" },
+    { id: "pos", label: "Punto de Venta", icon: "" },
+    { id: "agenda", label: "Agenda", icon: "📅" },
     { id: "cash", label: "Caja", icon: "📦" },
     { id: "new", label: "Nuevo Servicio", icon: "➕" },
     { id: "active", label: "Servicios Activos", icon: "📋" },
@@ -31,11 +33,9 @@ export default function ReceptionistDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo */}
             <div className="flex items-center gap-3">
               <div className="text-3xl">🐾</div>
               <div>
@@ -44,7 +44,6 @@ export default function ReceptionistDashboard() {
               </div>
             </div>
 
-            {/* User info & logout */}
             <div className="flex items-center gap-4">
               <div className="hidden sm:block text-right">
                 <div className="text-sm font-medium text-gray-900">{currentUser?.email}</div>
@@ -60,7 +59,6 @@ export default function ReceptionistDashboard() {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="border-t border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex gap-1 overflow-x-auto py-2">
@@ -83,9 +81,9 @@ export default function ReceptionistDashboard() {
         </nav>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {activeTab === "pos" && <POS />}
+        {activeTab === "agenda" && <AppointmentCalendar />}
         {activeTab === "cash" && <CashRegister />}
         {activeTab === "new" && <NewService />}
         {activeTab === "active" && <ActiveServices />}
