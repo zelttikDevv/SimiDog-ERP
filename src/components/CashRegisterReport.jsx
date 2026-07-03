@@ -4,8 +4,7 @@ import {
   collection,
   query,
   onSnapshot,
-  where,
-  orderBy
+  where
 } from "firebase/firestore";
 
 const BRANCHES = {
@@ -19,24 +18,36 @@ export default function CashRegisterReport() {
   const [loading, setLoading] = useState(true);
   const [filterBranch, setFilterBranch] = useState("all");
 
-  // Cargar cajas
   useEffect(() => {
     // Cajas abiertas
-    const qOpen = query(collection(db, "cash_registers"), where("status", "==", "abierta"));
+    const qOpen = query(
+      collection(db, "cash_registers"),
+      where("status", "==", "abierta")
+    );
     const unsubscribeOpen = onSnapshot(qOpen, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setOpenRegisters(data);
+    }, (error) => {
+      console.error("Error en cajas abiertas:", error);
     });
 
-    // Cajas cerradas
+    // Cajas cerradas (SIN orderBy, ordenamos en cliente)
     const qClosed = query(
       collection(db, "cash_registers"),
-      where("status", "==", "cerrada"),
-      orderBy("closedAt", "desc")
+      where("status", "==", "cerrada")
     );
     const unsubscribeClosed = onSnapshot(qClosed, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const data = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => {
+          const aTime = a.closedAt?.toMillis?.() || 0;
+          const bTime = b.closedAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
       setRegisters(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error en historial:", error);
       setLoading(false);
     });
 
@@ -46,7 +57,6 @@ export default function CashRegisterReport() {
     };
   }, []);
 
-  // Filtrar por sucursal
   const filteredRegisters = filterBranch === "all"
     ? registers
     : registers.filter((r) => r.branchId === filterBranch);
@@ -146,7 +156,7 @@ export default function CashRegisterReport() {
                       </div>
                     </div>
                     <div className={`text-sm font-bold ${diffColor}`}>
-                      {reg.difference >= 0 ? "✓" : "⚠"} ${Math.abs(reg.difference || 0).toFixed(2)}
+                      {(reg.difference || 0) >= 0 ? "✓" : "⚠"} ${Math.abs(reg.difference || 0).toFixed(2)}
                     </div>
                   </div>
                   
@@ -174,4 +184,4 @@ export default function CashRegisterReport() {
       </div>
     </div>
   );
-                                         }
+      }
