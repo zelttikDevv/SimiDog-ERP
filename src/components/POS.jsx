@@ -50,21 +50,22 @@ export default function POS() {
 
   // Datos
   const [products, setProducts] = useState([]);
+  const [currentRegister, setCurrentRegister] = useState(null);
   const [loading, setLoading] = useState(true);
   
   // Búsqueda
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("products"); // "products", "bath" o "mvz"
+  const [activeTab, setActiveTab] = useState("products");
 
   // Ticket
   const [items, setItems] = useState([]);
 
-  // Servicio seleccionado (baño o MVZ)
+  // Servicio seleccionado
   const [selectedService, setSelectedService] = useState(null);
   const [servicePrice, setServicePrice] = useState("");
   const [serviceNotes, setServiceNotes] = useState("");
   const [showServiceForm, setShowServiceForm] = useState(false);
-  const [serviceType, setServiceType] = useState("bath"); // "bath" o "mvz"
+  const [serviceType, setServiceType] = useState("bath");
 
   // Cupón
   const [couponCode, setCouponCode] = useState("");
@@ -92,6 +93,25 @@ export default function POS() {
         .sort((a, b) => a.name.localeCompare(b.name));
       setProducts(data);
       setLoading(false);
+    });
+
+    return unsubscribe;
+  }, [branchId]);
+
+  // Cargar caja abierta
+  useEffect(() => {
+    const q = query(
+      collection(db, "cash_registers"),
+      where("branchId", "==", branchId),
+      where("status", "==", "abierta")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        setCurrentRegister({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+      } else {
+        setCurrentRegister(null);
+      }
     });
 
     return unsubscribe;
@@ -156,14 +176,14 @@ export default function POS() {
     setShowServiceForm(true);
   };
 
-  // Agregar servicio (baño o MVZ) al ticket
+  // Agregar servicio al ticket
   const handleAddService = () => {
     if (!selectedService) return;
     
     const price = parseFloat(servicePrice) || selectedService.defaultPrice;
 
     setItems([...items, {
-      type: serviceType, // "bath" o "mvz"
+      type: serviceType,
       id: `${serviceType}_${Date.now()}`,
       serviceId: selectedService.id,
       name: selectedService.name,
@@ -271,6 +291,12 @@ export default function POS() {
 
   // Procesar venta
   const handleProcessSale = async () => {
+    if (!currentRegister) {
+      setMessage("❌ Debes abrir la caja antes de cobrar. Ve a la pestaña 'Caja' para abrirla.");
+      setTimeout(() => setMessage(""), 5000);
+      return;
+    }
+
     if (!isPaymentComplete) {
       setMessage("❌ El pago está incompleto");
       setTimeout(() => setMessage(""), 3000);
@@ -290,6 +316,7 @@ export default function POS() {
         branchId,
         userId: currentUser?.uid,
         userName: userData?.email || "Desconocido",
+        cashRegisterId: currentRegister.id,
         items: items.map((i) => ({
           type: i.type,
           id: i.id,
@@ -339,12 +366,10 @@ export default function POS() {
 
       setMessage("✅ Venta procesada correctamente");
 
-      // Generar PDF
       setTimeout(() => {
         generateTicketPDF(transaction);
       }, 500);
 
-      // Limpiar
       setItems([]);
       setAppliedCoupon(null);
       setCouponCode("");
@@ -363,6 +388,21 @@ export default function POS() {
   }
 
   return (<div className="space-y-4">
+      {/* Aviso de caja cerrada */}
+      {!currentRegister && (
+        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="font-semibold text-yellow-800">Caja cerrada</p>
+              <p className="text-sm text-yellow-700">
+                Debes abrir la caja antes de poder cobrar. Ve a la pestaña "Caja" para abrirla.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mensajes */}
       {message && (
         <div className={`p-3 rounded-md text-sm ${message.startsWith("✅") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
@@ -383,7 +423,7 @@ export default function POS() {
                   : "text-gray-600 hover:bg-gray-100"
               }`}
             >
-              ️ Productos
+              🛍️ Productos
             </button>
             <button
               onClick={() => setActiveTab("bath")}
@@ -624,7 +664,7 @@ export default function POS() {
         {/* Columna derecha: Ticket */}
         <div className="bg-white rounded-lg shadow p-4 h-fit sticky top-4">
           <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
-             Ticket
+            🧾 Ticket
             {items.length > 0 && (
               <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
                 {items.length} items
@@ -644,7 +684,7 @@ export default function POS() {
                     <div className="flex-1">
                       <div className="text-sm font-semibold">{item.name}</div>
                       <div className="text-xs text-gray-500">
-                        {item.type === "product" ? "️ Producto" : item.type === "bath" ? "🛁 Baño/Corte" : "🏥 Servicio MVZ"}
+                        {item.type === "product" ? "🛍️ Producto" : item.type === "bath" ? "🛁 Baño/Corte" : "🏥 Servicio MVZ"}
                         {item.notes && <div className="italic mt-1">{item.notes}</div>}
                       </div>
                     </div>
@@ -697,7 +737,7 @@ export default function POS() {
               <div className="bg-green-50 border border-green-200 rounded-lg p-2 flex justify-between items-center">
                 <div>
                   <div className="text-sm font-medium text-green-800">
-                    ️ {appliedCoupon.code}
+                    🎟️ {appliedCoupon.code}
                   </div>
                   <div className="text-xs text-green-600">
                     {appliedCoupon.discountType === "percent"
@@ -812,13 +852,8 @@ export default function POS() {
           {/* Botón procesar */}
           <button
             onClick={handleProcessSale}
-            disabled={!isPaymentComplete || items.length === 0 || processing}
+            disabled={!isPaymentComplete || items.length === 0 || processing || !currentRegister}
             className="w-full bg-green-600 text-white py-3 rounded-lg font-bold mt-4 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
-            {processing ? "⏳ Procesando..." : `✅ Cobrar $${total.toFixed(2)}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-                    }
+            {processing ? "⏳ Procesando..." : currentRegister ? `✅ Cobrar $${total.toFixed(2)}` : "🔒 Caja cerrada"}
+  
