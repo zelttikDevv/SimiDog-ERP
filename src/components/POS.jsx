@@ -48,44 +48,26 @@ export default function POS() {
   const { userData, currentUser } = useAuth();
   const branchId = userData?.branchId || "sucursal-11av";
 
-  // Datos
   const [products, setProducts] = useState([]);
   const [currentRegister, setCurrentRegister] = useState(null);
   const [loading, setLoading] = useState(true);
-  
-  // Búsqueda
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("products");
-
-  // Ticket
   const [items, setItems] = useState([]);
-
-  // Servicio seleccionado
   const [selectedService, setSelectedService] = useState(null);
   const [servicePrice, setServicePrice] = useState("");
   const [serviceNotes, setServiceNotes] = useState("");
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [serviceType, setServiceType] = useState("bath");
-
-  // Cupón
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState("");
-
-  // Pagos
   const [payments, setPayments] = useState([{ method: "efectivo", amount: "" }]);
-
-  // Estado
   const [processing, setProcessing] = useState(false);
   const [message, setMessage] = useState("");
 
-  // Cargar productos
   useEffect(() => {
-    const q = query(
-      collection(db, "products"),
-      where("branchId", "==", branchId)
-    );
-
+    const q = query(collection(db, "products"), where("branchId", "==", branchId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
@@ -94,18 +76,15 @@ export default function POS() {
       setProducts(data);
       setLoading(false);
     });
-
     return unsubscribe;
   }, [branchId]);
 
-  // Cargar caja abierta
   useEffect(() => {
     const q = query(
       collection(db, "cash_registers"),
       where("branchId", "==", branchId),
       where("status", "==", "abierta")
     );
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         setCurrentRegister({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
@@ -113,41 +92,33 @@ export default function POS() {
         setCurrentRegister(null);
       }
     });
-
     return unsubscribe;
   }, [branchId]);
 
-  // Filtrar productos
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Cálculos
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-  
   const discount = appliedCoupon
     ? appliedCoupon.discountType === "percent"
       ? subtotal * (appliedCoupon.discountValue / 100)
       : Math.min(appliedCoupon.discountValue, subtotal)
     : 0;
-  
   const total = Math.max(0, subtotal - discount);
-  
   const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
   const change = Math.max(0, totalPaid - total);
   const isPaymentComplete = totalPaid >= total && total > 0;
 
-  // Agregar producto al ticket
   const handleAddProduct = (product) => {
     const existing = items.find((i) => i.type === "product" && i.id === product.id);
-    
     if (existing) {
       if (existing.quantity + 1 > product.stock) {
         setMessage("❌ Stock insuficiente");
         setTimeout(() => setMessage(""), 3000);
         return;
       }
-      setItems(items.map((i) => 
+      setItems(items.map((i) =>
         i.type === "product" && i.id === product.id
           ? { ...i, quantity: i.quantity + 1, total: (i.quantity + 1) * i.unitPrice }
           : i
@@ -167,7 +138,6 @@ export default function POS() {
     setSearchTerm("");
   };
 
-  // Abrir formulario de servicio
   const handleOpenServiceForm = (service, type) => {
     setSelectedService(service);
     setServicePrice(service.defaultPrice);
@@ -176,12 +146,9 @@ export default function POS() {
     setShowServiceForm(true);
   };
 
-  // Agregar servicio al ticket
   const handleAddService = () => {
     if (!selectedService) return;
-    
     const price = parseFloat(servicePrice) || selectedService.defaultPrice;
-
     setItems([...items, {
       type: serviceType,
       id: `${serviceType}_${Date.now()}`,
@@ -192,14 +159,12 @@ export default function POS() {
       unitPrice: price,
       total: price
     }]);
-
     setSelectedService(null);
     setServicePrice("");
     setServiceNotes("");
     setShowServiceForm(false);
   };
 
-  // Actualizar cantidad
   const handleUpdateQuantity = (index, quantity) => {
     const newItems = [...items];
     const qty = parseInt(quantity) || 1;
@@ -209,7 +174,6 @@ export default function POS() {
     setItems(newItems);
   };
 
-  // Actualizar precio
   const handleUpdatePrice = (index, price) => {
     const newItems = [...items];
     newItems[index].unitPrice = parseFloat(price) || 0;
@@ -217,37 +181,26 @@ export default function POS() {
     setItems(newItems);
   };
 
-  // Eliminar item
   const handleRemoveItem = (index) => {
     setItems(items.filter((_, i) => i !== index));
   };
 
-  // Aplicar cupón
   const handleApplyCoupon = async () => {
     setCouponError("");
     setAppliedCoupon(null);
-
     if (!couponCode.trim()) return;
-
     try {
-      const q = query(
-        collection(db, "coupons"),
-        where("code", "==", couponCode.trim().toUpperCase())
-      );
+      const q = query(collection(db, "coupons"), where("code", "==", couponCode.trim().toUpperCase()));
       const snapshot = await getDocs(q);
-
       if (snapshot.empty) {
         setCouponError("❌ Cupón no encontrado");
         return;
       }
-
       const coupon = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
-
       if (coupon.used) {
         setCouponError("❌ Este cupón ya fue usado");
         return;
       }
-
       if (coupon.expiresAt) {
         const expDate = coupon.expiresAt.toDate ? coupon.expiresAt.toDate() : new Date(coupon.expiresAt);
         if (expDate < new Date()) {
@@ -255,7 +208,6 @@ export default function POS() {
           return;
         }
       }
-
       setAppliedCoupon(coupon);
       setCouponCode("");
     } catch (error) {
@@ -264,53 +216,44 @@ export default function POS() {
     }
   };
 
-  // Remover cupón
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null);
     setCouponCode("");
     setCouponError("");
   };
 
-  // Agregar método de pago
   const handleAddPayment = () => {
     setPayments([...payments, { method: "efectivo", amount: "" }]);
   };
 
-  // Actualizar pago
   const handleUpdatePayment = (index, field, value) => {
     const newPayments = [...payments];
     newPayments[index][field] = value;
     setPayments(newPayments);
   };
 
-  // Remover pago
   const handleRemovePayment = (index) => {
     if (payments.length === 1) return;
     setPayments(payments.filter((_, i) => i !== index));
   };
 
-  // Procesar venta
   const handleProcessSale = async () => {
     if (!currentRegister) {
       setMessage("❌ Debes abrir la caja antes de cobrar. Ve a la pestaña 'Caja' para abrirla.");
       setTimeout(() => setMessage(""), 5000);
       return;
     }
-
     if (!isPaymentComplete) {
       setMessage("❌ El pago está incompleto");
       setTimeout(() => setMessage(""), 3000);
       return;
     }
-
     if (items.length === 0) {
       setMessage("❌ No hay items en el ticket");
       return;
     }
-
     setProcessing(true);
     setMessage("");
-
     try {
       const transactionData = {
         branchId,
@@ -340,11 +283,31 @@ export default function POS() {
         status: "completado",
         timestamp: serverTimestamp()
       };
-
       const txRef = await addDoc(collection(db, "transactions"), transactionData);
       const transaction = { id: txRef.id, ...transactionData, timestamp: new Date() };
 
-      // Marcar cupón como usado
+      // Crear registros de servicios MVZ si hay
+      for (const item of items) {
+        if (item.type === "mvz") {
+          await addDoc(collection(db, "vet_services"), {
+            branchId,
+            petId: null,
+            petName: item.name,
+            ownerName: null,
+            ownerPhone: null,
+            serviceName: item.name,
+            serviceId: item.serviceId,
+            cost: item.total,
+            status: "facturado",
+            notes: item.notes || null,
+            registeredBy: currentUser?.uid,
+            registeredByEmail: userData?.email,
+            transactionId: txRef.id,
+            timestamp: serverTimestamp()
+          });
+        }
+      }
+
       if (appliedCoupon) {
         await updateDoc(doc(db, "coupons", appliedCoupon.id), {
           used: true,
@@ -352,8 +315,6 @@ export default function POS() {
           transactionId: txRef.id
         });
       }
-
-      // Descontar stock de productos
       for (const item of items) {
         if (item.type === "product") {
           const productRef = doc(db, "products", item.productId);
@@ -363,13 +324,10 @@ export default function POS() {
           });
         }
       }
-
       setMessage("✅ Venta procesada correctamente");
-
       setTimeout(() => {
         generateTicketPDF(transaction);
       }, 500);
-
       setItems([]);
       setAppliedCoupon(null);
       setCouponCode("");
@@ -388,11 +346,10 @@ export default function POS() {
   }
 
   return (<div className="space-y-4">
-      {/* Aviso de caja cerrada */}
       {!currentRegister && (
         <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">⚠️</span>
+            <span className="text-2xl">️</span>
             <div>
               <p className="font-semibold text-yellow-800">Caja cerrada</p>
               <p className="text-sm text-yellow-700">
@@ -403,7 +360,6 @@ export default function POS() {
         </div>
       )}
 
-      {/* Mensajes */}
       {message && (
         <div className={`p-3 rounded-md text-sm ${message.startsWith("✅") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
           {message}
@@ -411,16 +367,12 @@ export default function POS() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Columna izquierda: Productos y Servicios */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Tabs */}
           <div className="flex gap-2 bg-white rounded-lg shadow p-1">
             <button
               onClick={() => setActiveTab("products")}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                activeTab === "products"
-                  ? "bg-indigo-600 text-white"
-                  : "text-gray-600 hover:bg-gray-100"
+                activeTab === "products" ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"
               }`}
             >
               🛍️ Productos
@@ -428,9 +380,7 @@ export default function POS() {
             <button
               onClick={() => setActiveTab("bath")}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                activeTab === "bath"
-                  ? "bg-purple-600 text-white"
-                  : "text-gray-600 hover:bg-gray-100"
+                activeTab === "bath" ? "bg-purple-600 text-white" : "text-gray-600 hover:bg-gray-100"
               }`}
             >
               🛁 Baño/Corte
@@ -438,16 +388,13 @@ export default function POS() {
             <button
               onClick={() => setActiveTab("mvz")}
               className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-                activeTab === "mvz"
-                  ? "bg-green-600 text-white"
-                  : "text-gray-600 hover:bg-gray-100"
+                activeTab === "mvz" ? "bg-green-600 text-white" : "text-gray-600 hover:bg-gray-100"
               }`}
             >
               🏥 MVZ
             </button>
           </div>
 
-          {/* Productos */}
           {activeTab === "products" && (
             <div className="bg-white rounded-lg shadow p-4">
               <div className="mb-4">
@@ -459,7 +406,6 @@ export default function POS() {
                   className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm focus:border-indigo-500 focus:outline-none"
                 />
               </div>
-
               {filteredProducts.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   {searchTerm ? "No se encontraron productos" : "No hay productos disponibles"}
@@ -484,7 +430,6 @@ export default function POS() {
             </div>
           )}
 
-          {/* Servicios de Baño/Corte */}
           {activeTab === "bath" && (
             <div className="bg-white rounded-lg shadow p-4">
               {!showServiceForm ? (
@@ -498,9 +443,7 @@ export default function POS() {
                         className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-purple-500 hover:bg-purple-50 transition-all"
                       >
                         <div className="font-medium text-sm">{service.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          Precio: ${service.defaultPrice}
-                        </div>
+                        <div className="text-xs text-gray-500 mt-1">Precio: ${service.defaultPrice}</div>
                       </button>
                     ))}
                   </div>
@@ -508,7 +451,6 @@ export default function POS() {
               ) : (
                 <div className="space-y-3">
                   <h3 className="font-semibold">Agregar Servicio de Baño/Corte</h3>
-                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
                     <select
@@ -525,7 +467,6 @@ export default function POS() {
                       ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Precio ($)</label>
                     <input
@@ -536,7 +477,6 @@ export default function POS() {
                       className="w-full border rounded-md px-3 py-2 text-sm"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notas (opcional)</label>
                     <textarea
@@ -547,7 +487,6 @@ export default function POS() {
                       placeholder="Observaciones del servicio..."
                     />
                   </div>
-
                   <div className="flex gap-2">
                     <button
                       onClick={handleAddService}
@@ -572,7 +511,6 @@ export default function POS() {
             </div>
           )}
 
-          {/* Servicios MVZ */}
           {activeTab === "mvz" && (
             <div className="bg-white rounded-lg shadow p-4">
               {!showServiceForm ? (
@@ -586,9 +524,7 @@ export default function POS() {
                         className="text-left border-2 border-gray-200 rounded-lg p-3 hover:border-green-500 hover:bg-green-50 transition-all"
                       >
                         <div className="font-medium text-sm">{service.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          Precio: ${service.defaultPrice}
-                        </div>
+                        <div className="text-xs text-gray-500 mt-1">Precio: ${service.defaultPrice}</div>
                       </button>
                     ))}
                   </div>
@@ -596,7 +532,6 @@ export default function POS() {
               ) : (
                 <div className="space-y-3">
                   <h3 className="font-semibold">Agregar Servicio MVZ</h3>
-                  
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Servicio</label>
                     <select
@@ -613,7 +548,6 @@ export default function POS() {
                       ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Precio ($)</label>
                     <input
@@ -624,7 +558,6 @@ export default function POS() {
                       className="w-full border rounded-md px-3 py-2 text-sm"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notas clínicas (opcional)</label>
                     <textarea
@@ -635,7 +568,6 @@ export default function POS() {
                       placeholder="Diagnóstico, tratamiento, etc."
                     />
                   </div>
-
                   <div className="flex gap-2">
                     <button
                       onClick={handleAddService}
@@ -659,10 +591,7 @@ export default function POS() {
               )}
             </div>
           )}
-        </div>
-
-        {/* Columna derecha: Ticket */}
-        <div className="bg-white rounded-lg shadow p-4 h-fit sticky top-4">
+        </div><div className="bg-white rounded-lg shadow p-4 h-fit sticky top-4">
           <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
             🧾 Ticket
             {items.length > 0 && (
@@ -695,7 +624,6 @@ export default function POS() {
                       ×
                     </button>
                   </div>
-
                   <div className="flex gap-2 items-center">
                     {item.type === "product" ? (
                       <>
@@ -721,7 +649,6 @@ export default function POS() {
                         />
                       </>
                     )}
-                    
                     <div className="text-sm font-bold text-indigo-600 ml-auto">
                       ${item.total.toFixed(2)}
                     </div>
@@ -731,14 +658,11 @@ export default function POS() {
             </div>
           )}
 
-          {/* Cupón */}
           <div className="border-t pt-3 mb-3">
             {appliedCoupon ? (
               <div className="bg-green-50 border border-green-200 rounded-lg p-2 flex justify-between items-center">
                 <div>
-                  <div className="text-sm font-medium text-green-800">
-                    🎟️ {appliedCoupon.code}
-                  </div>
+                  <div className="text-sm font-medium text-green-800">🎟️ {appliedCoupon.code}</div>
                   <div className="text-xs text-green-600">
                     {appliedCoupon.discountType === "percent"
                       ? `${appliedCoupon.discountValue}% descuento`
@@ -774,7 +698,6 @@ export default function POS() {
             )}
           </div>
 
-          {/* Totales */}
           <div className="border-t pt-3 space-y-1 text-sm">
             <div className="flex justify-between text-gray-600">
               <span>Subtotal:</span>
@@ -792,7 +715,6 @@ export default function POS() {
             </div>
           </div>
 
-          {/* Pagos */}
           <div className="border-t pt-3 mt-3 space-y-2">
             <div className="flex justify-between items-center">
               <h4 className="font-semibold text-sm">💰 Forma de pago</h4>
@@ -803,7 +725,6 @@ export default function POS() {
                 + Dividir
               </button>
             </div>
-
             {payments.map((payment, index) => (
               <div key={index} className="flex gap-2 items-center">
                 <select
@@ -833,14 +754,12 @@ export default function POS() {
                 )}
               </div>
             ))}
-
             <div className="flex justify-between text-sm pt-2 border-t mt-2">
               <span>Total pagado:</span>
               <span className={`font-semibold ${isPaymentComplete ? "text-green-600" : "text-gray-600"}`}>
                 ${totalPaid.toFixed(2)}
               </span>
             </div>
-
             {change > 0 && (
               <div className="flex justify-between text-sm bg-green-50 p-2 rounded">
                 <span>Cambio:</span>
@@ -849,16 +768,15 @@ export default function POS() {
             )}
           </div>
 
-          {/* Botón procesar */}
           <button
             onClick={handleProcessSale}
             disabled={!isPaymentComplete || items.length === 0 || processing || !currentRegister}
             className="w-full bg-green-600 text-white py-3 rounded-lg font-bold mt-4 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
-            {processing ? "⏳ Procesando..." : currentRegister ? `✅ Cobrar $${total.toFixed(2)}` : "🔒 Caja cerrada"}
+            {processing ? " Procesando..." : currentRegister ? `✅ Cobrar $${total.toFixed(2)}` : " Caja cerrada"}
           </button>
         </div>
       </div>
     </div>
   );
-}
+                }
