@@ -404,4 +404,4 @@ export default function CashRegister() {
       </div>
     </div>
   );
-  }
+    }
