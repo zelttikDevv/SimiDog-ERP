@@ -44,8 +44,6 @@ export default function AdminUsers() {
   useEffect(() => {
     let q;
     
-    // Si es admin, mostrar todos los usuarios
-    // Si es recepcionista o MVZ, mostrar solo usuarios de su sucursal
     if (userData?.role === "admin") {
       q = query(collection(db, "users"));
     } else {
@@ -99,30 +97,53 @@ export default function AdminUsers() {
     setMessage("");
 
     try {
-      const userData = {
+      const updateData = {
         email: formData.email.trim(),
         role: formData.role,
-        branchId: formData.branchId || null,
         updatedAt: serverTimestamp()
       };
 
-      if (editingUser) {
-        await updateDoc(doc(db, "users", editingUser.id), userData);
-        setMessage("✅ Usuario actualizado");
-      } else {
-        userData.createdAt = serverTimestamp();
-        userData.active = true;
-        await addDoc(collection(db, "users"), userData);
-        setMessage("✅ Usuario creado");
+      // Solo agregar branchId si no es admin
+      if (formData.role !== "admin") {
+        updateData.branchId = formData.branchId;
       }
 
-      setTimeout(() => {
-        setShowForm(false);
-        setMessage("");
-      }, 1500);
+      if (editingUser) {
+        // ACTUALIZAR usuario existente
+        console.log("🔄 Actualizando usuario:", editingUser.id);
+        console.log("📝 Datos a actualizar:", updateData);
+        
+        const userRef = doc(db, "users", editingUser.id);
+        await updateDoc(userRef, updateData);
+        
+        console.log("✅ Usuario actualizado correctamente");
+        setMessage("✅ Usuario actualizado");
+        
+        // Cerrar formulario después de 1.5 segundos
+        setTimeout(() => {
+          setShowForm(false);
+          setEditingUser(null);
+          setMessage("");
+        }, 1500);
+      } else {
+        // CREAR nuevo usuario
+        const newUser = {
+          ...updateData,
+          createdAt: serverTimestamp(),
+          active: true
+        };
+        
+        await addDoc(collection(db, "users"), newUser);
+        setMessage("✅ Usuario creado");
+        
+        setTimeout(() => {
+          setShowForm(false);
+          setMessage("");
+        }, 1500);
+      }
     } catch (error) {
-      console.error("Error:", error);
-      setMessage("❌ Error al guardar");
+      console.error("❌ Error al guardar:", error);
+      setMessage("❌ Error al guardar: " + error.message);
     } finally {
       setSaving(false);
     }
@@ -272,9 +293,6 @@ export default function AdminUsers() {
                   className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Dejar vacío para generar automática"
                 />
-                <p className="text-xs text-slate-500 mt-1">
-                  Si se deja vacío, se generará una contraseña temporal
-                </p>
               </div>
             )}
 
@@ -305,7 +323,11 @@ export default function AdminUsers() {
                 {saving ? "Guardando..." : "💾 Guardar cambios"}
               </button>
               <button
-                onClick={() => setShowForm(false)}
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingUser(null);
+                  setMessage("");
+                }}
                 className="px-4 py-2 border border-slate-300 rounded-md text-sm font-medium hover:bg-slate-50"
               >
                 Cancelar
