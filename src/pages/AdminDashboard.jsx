@@ -8,6 +8,7 @@ import AdminUsers from "../components/AdminUsers";
 import Inventory from "../components/Inventory";
 import Consumptions from "../components/Consumptions";
 import CouponManager from "../components/CouponManager";
+import CashRegisterReport from "../components/CashRegisterReport";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("metrics");
@@ -24,7 +25,8 @@ export default function AdminDashboard() {
     { id: "users", label: "Usuarios", icon: "👥" },
     { id: "inventory", label: "Inventario", icon: "📦" },
     { id: "consumptions", label: "Consumos", icon: "📥" },
-    { id: "coupons", label: "Cupones", icon: "🎟️" }
+    { id: "coupons", label: "Cupones", icon: "🎟️" },
+    { id: "cash", label: "Cajas", icon: "📦" }
   ];
 
   return (
@@ -88,6 +90,7 @@ export default function AdminDashboard() {
         {activeTab === "inventory" && <Inventory />}
         {activeTab === "consumptions" && <Consumptions showReport={true} />}
         {activeTab === "coupons" && <CouponManager />}
+        {activeTab === "cash" && <CashRegisterReport />}
       </main>
     </div>
   );
