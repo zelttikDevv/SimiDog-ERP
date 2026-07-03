@@ -9,6 +9,8 @@ import Inventory from "../components/Inventory";
 import Consumptions from "../components/Consumptions";
 import CouponManager from "../components/CouponManager";
 import CashRegisterReport from "../components/CashRegisterReport";
+import MedicalServiceCatalog from "../components/MedicalServiceCatalog";
+import BathServiceCatalog from "../components/BathServiceCatalog";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("metrics");
@@ -21,21 +23,21 @@ export default function AdminDashboard() {
   };
 
   const menuItems = [
-    { id: "metrics", label: "Métricas", icon: "📊" },
+    { id: "metrics", label: "Métricas", icon: "" },
     { id: "users", label: "Usuarios", icon: "👥" },
     { id: "inventory", label: "Inventario", icon: "📦" },
+    { id: "medical", label: "Serv. Médicos", icon: "🩺" },
+    { id: "bath", label: "Serv. Baño", icon: "🛁" },
     { id: "consumptions", label: "Consumos", icon: "📥" },
     { id: "coupons", label: "Cupones", icon: "🎟️" },
-    { id: "cash", label: "Cajas", icon: "📦" }
+    { id: "cash", label: "Cajas", icon: "💵" }
   ];
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo */}
             <div className="flex items-center gap-3">
               <div className="text-3xl">🐾</div>
               <div>
@@ -44,7 +46,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* User info & logout */}
             <div className="flex items-center gap-4">
               <div className="hidden sm:block text-right">
                 <div className="text-sm font-medium text-gray-900">{currentUser?.email}</div>
@@ -60,7 +61,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="border-t border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex gap-1 overflow-x-auto py-2">
@@ -83,11 +83,12 @@ export default function AdminDashboard() {
         </nav>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {activeTab === "metrics" && <AdminMetrics />}
         {activeTab === "users" && <AdminUsers />}
         {activeTab === "inventory" && <Inventory />}
+        {activeTab === "medical" && <MedicalServiceCatalog />}
+        {activeTab === "bath" && <BathServiceCatalog />}
         {activeTab === "consumptions" && <Consumptions showReport={true} />}
         {activeTab === "coupons" && <CouponManager />}
         {activeTab === "cash" && <CashRegisterReport />}
