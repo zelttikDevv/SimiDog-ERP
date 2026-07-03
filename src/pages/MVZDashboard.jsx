@@ -3,11 +3,13 @@ import { useAuth } from "../contexts/AuthContext";
 import { auth } from "../lib/firebase";
 import { signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
-import VetServices from "../components/VetServices";
+import AppointmentCalendar from "../components/AppointmentCalendar";
+import AppointmentDetail from "../components/AppointmentDetail";
+import MVZScheduleManager from "../components/MVZScheduleManager";
 import MedicalHistory from "../components/MedicalHistory";
 
 export default function MVZDashboard() {
-  const [activeTab, setActiveTab] = useState("services");
+  const [activeTab, setActiveTab] = useState("agenda");
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
@@ -17,8 +19,10 @@ export default function MVZDashboard() {
   };
 
   const menuItems = [
-    { id: "services", label: "Mis Servicios", icon: "🏥" },
-    { id: "history", label: "Historia Clínica", icon: "📋" }
+    { id: "agenda", label: "Agenda", icon: "" },
+    { id: "atencion", label: "Atención", icon: "" },
+    { id: "horarios", label: "Mis Horarios", icon: "" },
+    { id: "historia", label: "Historia Clínica", icon: "📋" }
   ];
 
   return (
@@ -72,9 +76,11 @@ export default function MVZDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {activeTab === "services" && <VetServices />}
-        {activeTab === "history" && <MedicalHistory />}
+        {activeTab === "agenda" && <AppointmentCalendar />}
+        {activeTab === "atencion" && <AppointmentDetail />}
+        {activeTab === "horarios" && <MVZScheduleManager />}
+        {activeTab === "historia" && <MedicalHistory />}
       </main>
     </div>
   );
-                    }
+}
