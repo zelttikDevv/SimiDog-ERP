@@ -42,18 +42,27 @@ export default function AdminUsers() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const q = query(collection(db, "users"), where("branchId", "==", branchId));
+    let q;
+    
+    // Si es admin, mostrar todos los usuarios
+    // Si es recepcionista o MVZ, mostrar solo usuarios de su sucursal
+    if (userData?.role === "admin") {
+      q = query(collection(db, "users"));
+    } else {
+      q = query(collection(db, "users"), where("branchId", "==", branchId));
+    }
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setUsers(data);
       setLoading(false);
     }, (error) => {
-      console.error("Error:", error);
+      console.error("Error cargando usuarios:", error);
       setLoading(false);
     });
+    
     return unsubscribe;
-  }, [branchId]);
-
+  }, [branchId, userData?.role]);
   const handleCreate = () => {
     setEditingUser(null);
     setFormData({ email: "", role: "recepcionista", branchId: "", newPassword: "" });
