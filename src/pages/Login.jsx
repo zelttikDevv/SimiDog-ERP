@@ -1,52 +1,62 @@
 import { useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { auth, db } from "../lib/firebase";
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { Mail, Lock, Eye, EyeOff, Chrome } from "lucide-react";
+import { Chrome, LogOut } from "lucide-react";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { currentUser: authUser } = useAuth();
   const navigate = useNavigate();
 
-  const handleEmailLogin = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
+  // Si ya está logueado, redirigir al dashboard correspondiente
+  if (authUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center space-y-6">
+            <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto shadow-lg">
+              <Chrome className="w-12 h-12 text-white" />
+            </div>
+            
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900">Ya estás conectado</h2>
+              <p className="text-slate-600 mt-2">{authUser.email}</p>
+            </div>
 
-    try {
-      await login(email, password);
-      navigate("/admin");
-    } catch (error) {
-      console.error("Error de login:", error);
-      
-      let errorMessage = "Error al iniciar sesión";
-      
-      if (error.code === "auth/invalid-credential") {
-        errorMessage = "❌ Email o contraseña incorrectos";
-      } else if (error.code === "auth/user-not-found") {
-        errorMessage = "❌ Usuario no encontrado";
-      } else if (error.code === "auth/wrong-password") {
-        errorMessage = "❌ Contraseña incorrecta";
-      } else if (error.code === "auth/user-disabled") {
-        errorMessage = "❌ Este usuario está deshabilitado";
-      } else if (error.code === "auth/too-many-requests") {
-        errorMessage = "❌ Demasiados intentos. Espera unos minutos";
-      } else if (error.code === "auth/invalid-email") {
-        errorMessage = "❌ Email inválido";
-      }
-      
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <button
+                onClick={() => navigate("/admin")}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition-all"
+              >
+                Ir al Dashboard
+              </button>
+              
+              <button
+                onClick={async () => {
+                  await signOut(auth);
+                  setError("");
+                }}
+                className="w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-700 py-3 rounded-lg font-medium hover:bg-slate-200 transition-all"
+              >
+                <LogOut className="w-5 h-5" />
+                Cerrar Sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleGoogleLogin = async () => {
     setError("");
@@ -54,39 +64,58 @@ export default function Login() {
 
     try {
       const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+      
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // Verificar si el usuario existe en Firestore
+      // Verificar o crear documento en Firestore
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
-        // Crear documento si no existe (solo si es la primera vez)
+        // Usuario nuevo - crear con rol admin por defecto (cambiar después)
         await setDoc(userRef, {
           email: user.email,
-          role: "recepcionista", // Rol por defecto, el admin puede cambiarlo
-          branchId: "sucursal-11av", // Sucursal por defecto
+          name: user.displayName || "",
+          photoURL: user.photoURL || "",
+          role: "admin", // ← CAMBIA ESTO según el usuario
+          branchId: null,
           active: true,
+          emailVerified: user.emailVerified,
           createdAt: serverTimestamp(),
-          lastLogin: serverTimestamp()
+          lastLogin: serverTimestamp(),
+          authProvider: "google",
+          passwordChanged: true // ← IMPORTANTE: marcar como cambiado
         });
       } else {
-        // Actualizar último login
-        await setDoc(userRef, {
-          lastLogin: serverTimestamp()
-        }, { merge: true });
+        // Usuario existente - actualizar y asegurar que no pida cambio
+        await updateDoc(userRef, {
+          lastLogin: serverTimestamp(),
+          emailVerified: user.emailVerified,
+          photoURL: user.photoURL || userSnap.data().photoURL,
+          name: user.displayName || userSnap.data().name,
+          passwordChanged: true, // ← ASEGURAR que no pida cambio
+          mustChangePassword: false,
+          forcePasswordChange: false
+        });
       }
 
-      // Verificar si está activo
-      if (userSnap.exists() && userSnap.data().active === false) {
-        await auth.signOut();
-        setError("❌ Tu cuenta está desactivada. Contacta al administrador");
-        setLoading(false);
-        return;
+      // Redirigir según rol - SIN pasar por change-password
+      const userData = userSnap.exists() ? userSnap.data() : { role: "admin" };
+      
+      if (userData.role === "admin") {
+        navigate("/admin");
+      } else if (userData.role === "mvz") {
+        navigate("/mvz");
+      } else if (userData.role === "recepcionista") {
+        navigate("/receptionist");
+      } else {
+        navigate("/admin"); // default
       }
-
-      navigate("/admin");
+      
     } catch (error) {
       console.error("Error con Google:", error);
       
@@ -105,7 +134,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo y título */}
+        {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
@@ -124,92 +153,41 @@ export default function Login() {
             </div>
           )}
 
-          {/* Botón Google */}
+          {/* Google Sign-In */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-300 text-slate-700 py-3 rounded-lg font-medium hover:bg-slate-50 hover:border-slate-400 transition-all disabled:opacity-50 shadow-sm"
+            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-300 text-slate-700 py-4 rounded-xl font-medium hover:bg-slate-50 hover:border-slate-400 transition-all disabled:opacity-50 shadow-lg hover:shadow-xl"
           >
-            <Chrome className="w-5 h-5" />
-            <span>Acceder con Google</span>
+            <Chrome className="w-6 h-6" />
+            <div className="text-left">
+              <div className="font-semibold">Acceder con Google</div>
+              <div className="text-xs text-slate-500">Recomendado - Más seguro y rápido</div>
+            </div>
           </button>
 
-          {/* Separador */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-slate-500">o continúa con email</span>
-            </div>
+          {/* Info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+            <p className="font-semibold mb-1"> Seguridad mejorada:</p>
+            <ul className="space-y-1 text-xs">
+              <li>• Sin contraseñas que recordar</li>
+              <li>• Acceso rápido con 1 clic</li>
+              <li>• Protección contra hackers</li>
+            </ul>
           </div>
 
-          {/* Formulario email/contraseña */}
-          <form onSubmit={handleEmailLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Email
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-slate-400" />
-                </div>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  placeholder="tu@email.com"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Contraseña
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-slate-400" />
-                </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  placeholder="••••••••"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-slate-400" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-slate-400" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
-            </button>
-          </form>
+          {/* Soporte */}
+          <div className="text-center text-sm text-slate-600">
+            <p>¿Problemas para entrar?</p>
+            <p className="font-medium">Contacta al administrador: admin@simidog.com</p>
+          </div>
         </div>
 
         {/* Footer */}
-        <p className="text-center text-sm text-slate-600 mt-6">
-          ¿Problemas para entrar? Contacta al administrador
+        <p className="text-center text-xs text-slate-500 mt-6">
+          © 2026 SimiDog ERP - Todos los derechos reservados
         </p>
       </div>
     </div>
   );
-          }
+}
