@@ -31,9 +31,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   }
 
   // Verificar si debe cambiar contraseña
-  if (userData?.passwordChanged !== true) {
-    return <Navigate to="/change-password" replace />;
-  }
+  
 
   // Verificar rol
   if (allowedRoles && !allowedRoles.includes(userData?.role)) {
